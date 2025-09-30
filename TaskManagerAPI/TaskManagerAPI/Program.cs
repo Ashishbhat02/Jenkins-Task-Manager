@@ -15,6 +15,8 @@ namespace TaskManagerAPI
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
                     webBuilder.UseStartup<Startup>();
+                    // Listen on all network interfaces, port 80
+                    webBuilder.UseUrls("http://0.0.0.0:80");
                 });
     }
 }
