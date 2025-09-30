@@ -9,7 +9,7 @@ namespace TaskManagerAPI.Data
         {
         }
 
-        public DbSet<Task> Tasks { get; set; }
+        public DbSet<TaskItem> Tasks { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
