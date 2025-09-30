@@ -11,20 +11,12 @@ COPY . .
 RUN dotnet build "TaskManagerAPI.csproj" -c Release -o /app/build
 RUN dotnet publish "TaskManagerAPI.csproj" -c Release -o /app/publish
 
-# Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:5.0 AS final
-
-# Update base image to use bullseye (current LTS) instead of buster
-RUN sed -i 's/debian.debian.org/archive.debian.org/g' /etc/apt/sources.list && \
-    sed -i 's/security.debian.org/archive.debian.org/g' /etc/apt/sources.list && \
-    sed -i '/buster-updates/d' /etc/apt/sources.list
-
+# Runtime stage - use Alpine for smaller size and better compatibility
+FROM mcr.microsoft.com/dotnet/aspnet:5.0-alpine AS final
 WORKDIR /app
 
-# Install SQLite and curl using archive repositories
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends sqlite3 curl && \
-    rm -rf /var/lib/apt/lists/*
+# Install SQLite and curl (Alpine uses apk instead of apt)
+RUN apk add --no-cache sqlite curl
 
 # Copy published application
 COPY --from=build /app/publish .
