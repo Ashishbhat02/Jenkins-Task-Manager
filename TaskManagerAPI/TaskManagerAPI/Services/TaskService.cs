@@ -18,34 +18,43 @@ namespace TaskManagerAPI.Services
 
         public async Task<List<TaskItem>> GetAllTasks()
         {
-            return await _context.Tasks.OrderBy(t => t.DueDate).ToListAsync();
+            return await _context.TaskItems.ToListAsync();  // Changed from Tasks to TaskItems
         }
 
         public async Task<TaskItem> GetTaskById(int id)
         {
-            return await _context.Tasks.FindAsync(id);
+            return await _context.TaskItems.FindAsync(id);  // Changed from Tasks to TaskItems
         }
 
         public async Task<TaskItem> CreateTask(TaskItem task)
         {
-            _context.Tasks.Add(task);
+            _context.TaskItems.Add(task);  // Changed from Tasks to TaskItems
             await _context.SaveChangesAsync();
             return task;
         }
 
-        public async Task<TaskItem> UpdateTask(TaskItem task)
+        public async Task<TaskItem> UpdateTask(int id, TaskItem task)
         {
-            _context.Entry(task).State = EntityState.Modified;
-            await _context.SaveChangesAsync();
-            return task;
+            var existingTask = await _context.TaskItems.FindAsync(id);  // Changed from Tasks to TaskItems
+                if (existingTask == null)
+                    return null;
+
+                    // Update properties
+                    existingTask.Title = task.Title;
+                    existingTask.Description = task.Description;
+                    existingTask.IsCompleted = task.IsCompleted;
+
+                    await _context.SaveChangesAsync();
+                    return existingTask;
         }
 
         public async Task<bool> DeleteTask(int id)
         {
-            var task = await _context.Tasks.FindAsync(id);
-            if (task == null) return false;
+            var task = await _context.TaskItems.FindAsync(id);  // Changed from Tasks to TaskItems
+            if (task == null)
+                return false;
 
-            _context.Tasks.Remove(task);
+            _context.TaskItems.Remove(task);  // Changed from Tasks to TaskItems
             await _context.SaveChangesAsync();
             return true;
         }
