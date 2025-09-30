@@ -1,11 +1,8 @@
 pipeline {
     agent any
     environment {
-        DOTNET_IMAGE = 'mcr.microsoft.com/dotnet/sdk:5.0'
-        NODE_IMAGE = 'node:18.16.0'
-        DOTNET_HOME = "${env.WORKSPACE}/.dotnet"
-        NUGET_HOME = "${env.WORKSPACE}/.nuget"
-        CONTAINER_HOME = "/home/jenkins"
+        DOTNET_ROOT = "${WORKSPACE}/.dotnet"
+        NUGET_PACKAGES = "${WORKSPACE}/.nuget"
     }
     stages {
         stage('Checkout SCM') {
@@ -14,25 +11,39 @@ pipeline {
             }
         }
 
-        stage('Build Backend') {
+        stage('Prepare Environment') {
             steps {
-                dir('TaskManagerAPI/TaskManagerAPI') {
+                script {
+                    // Ensure .dotnet and .nuget directories exist with correct permissions
+                    sh '''
+                        mkdir -p $WORKSPACE/.dotnet
+                        mkdir -p $WORKSPACE/.nuget
+                        chmod -R 775 $WORKSPACE/.dotnet
+                        chmod -R 775 $WORKSPACE/.nuget
+                        chown -R $(id -u):$(id -g) $WORKSPACE/.dotnet
+                        chown -R $(id -u):$(id -g) $WORKSPACE/.nuget
+                    '''
+                }
+            }
+        }
+
+        stage('Build Backend') {
+            dir('TaskManagerAPI/TaskManagerAPI') {
+                steps {
                     script {
                         def uid = sh(script: 'id -u', returnStdout: true).trim()
                         def gid = sh(script: 'id -g', returnStdout: true).trim()
 
-                        docker.image(DOTNET_IMAGE).inside(
-                            "-u ${uid}:${gid} " +
-                            "-e HOME=${CONTAINER_HOME} " +
-                            "-v ${DOTNET_HOME}:${CONTAINER_HOME}/.dotnet " +
-                            "-v ${NUGET_HOME}:${CONTAINER_HOME}/.nuget " +
-                            "-w ${WORKSPACE}/TaskManagerAPI/TaskManagerAPI"
-                        ) {
+                        withDockerContainer(image: 'mcr.microsoft.com/dotnet/sdk:5.0',
+                                            args: "-u ${uid}:${gid} \
+                                                   -v $WORKSPACE/.dotnet:/home/jenkins/.dotnet \
+                                                   -v $WORKSPACE/.nuget:/home/jenkins/.nuget") {
                             sh '''
-                                export DOTNET_ROOT=${HOME}/.dotnet
-                                export NUGET_PACKAGES=${HOME}/.nuget
+                                export DOTNET_ROOT=/home/jenkins/.dotnet
+                                export NUGET_PACKAGES=/home/jenkins/.nuget
                                 dotnet restore
                                 dotnet build --configuration Release
+                                dotnet test --no-build
                             '''
                         }
                     }
@@ -41,58 +52,61 @@ pipeline {
         }
 
         stage('Build Frontend') {
-            steps {
-                dir('TaskManagerUI/TaskManagerUI') {
+            dir('TaskManagerUI') {
+                steps {
                     script {
-                        docker.image(NODE_IMAGE).inside {
-                            sh 'npm install'
-                            sh 'npm run build'
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Run Frontend Tests') {
-            steps {
-                dir('TaskManagerUI/TaskManagerUI') {
-                    script {
-                        docker.image(NODE_IMAGE).inside {
-                            sh 'npm test'
-                        }
+                        // Install Node/NPM if needed
+                        sh '''
+                            if ! command -v npm &> /dev/null; then
+                                echo "Node not installed, please install Node and NVM."
+                                exit 1
+                            fi
+                        '''
+                        sh '''
+                            npm install
+                            npm run build
+                            npm test
+                        '''
                     }
                 }
             }
         }
 
         stage('Docker Build Backend') {
-            steps {
-                dir('TaskManagerAPI') {
-                    sh 'docker build -t taskmanager-backend:latest .'
+            dir('TaskManagerAPI') {
+                steps {
+                    sh '''
+                        docker build -t taskmanager-backend:latest .
+                    '''
                 }
             }
         }
 
         stage('Docker Build Frontend') {
-            steps {
-                dir('TaskManagerUI') {
-                    sh 'docker build -t taskmanager-frontend:latest .'
+            dir('TaskManagerUI') {
+                steps {
+                    sh '''
+                        docker build -t taskmanager-frontend:latest .
+                    '''
                 }
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                echo "Deploying backend and frontend Docker images..."
+                echo "Deploying backend and frontend containers to production..."
+                // Add your deployment commands here (e.g., docker-compose, kubectl, ECS)
             }
         }
 
         stage('Health Check') {
             steps {
-                echo "Checking application health..."
+                echo "Running health checks..."
+                // Add your health check commands here
             }
         }
     }
+
     post {
         always {
             cleanWs()
