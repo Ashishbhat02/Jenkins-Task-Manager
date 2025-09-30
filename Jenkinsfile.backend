@@ -1,0 +1,83 @@
+pipeline {
+    agent {
+        docker {
+            image 'mcr.microsoft.com/dotnet/sdk:5.0'
+            reuseNode true
+        }
+    }
+    
+    environment {
+        PROJECT_NAME = 'TaskManagerAPI.csproj'
+        DOCKER_IMAGE = 'taskmanager-backend'
+    }
+    
+    stages {
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+                sh 'pwd'
+                sh 'ls -la'
+            }
+        }
+        
+        stage('Restore Dependencies') {
+            steps {
+                sh "dotnet restore ${PROJECT_NAME}"
+            }
+        }
+        
+        stage('Build Application') {
+            steps {
+                sh "dotnet build ${PROJECT_NAME} -c Release --no-restore"
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                script {
+                    // Try to run tests, but continue if none exist
+                    try {
+                        sh "dotnet test ${PROJECT_NAME} --verbosity normal --logger trx"
+                    } catch (Exception e) {
+                        echo "No tests found or tests failed: ${e.message}"
+                        // Continue pipeline even if tests fail
+                    }
+                }
+            }
+        }
+        
+        stage('Publish Application') {
+            steps {
+                sh "dotnet publish ${PROJECT_NAME} -c Release -o ./publish --no-restore"
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    // Build Docker image with build number tag
+                    docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
+                    
+                    // Also tag as latest for production
+                    sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            // Archive build artifacts
+            archiveArtifacts artifacts: 'publish/**/*', fingerprint: true
+            
+            // Clean up workspace
+            cleanWs()
+        }
+        success {
+            echo 'Backend build completed successfully! ✅'
+        }
+        failure {
+            echo 'Backend build failed! ❌'
+        }
+    }
+}

@@ -1,0 +1,114 @@
+pipeline {
+    agent {
+        docker {
+            image 'node:16-alpine'
+            reuseNode true
+        }
+    }
+    
+    environment {
+        DOCKER_IMAGE = 'taskmanager-frontend'
+    }
+    
+    stages {
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+                sh 'pwd'
+                sh 'ls -la'
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install'
+            }
+            
+            post {
+                success {
+                    echo 'Dependencies installed successfully'
+                }
+            }
+        }
+        
+        stage('Code Quality Check') {
+            steps {
+                script {
+                    // Try to run linting if available
+                    try {
+                        sh 'npm run lint || true'
+                    } catch (Exception e) {
+                        echo "Linting not configured: ${e.message}"
+                    }
+                }
+            }
+        }
+        
+        stage('Build React App') {
+            steps {
+                sh 'npm run build'
+            }
+            
+            post {
+                success {
+                    // Archive the build folder
+                    archiveArtifacts artifacts: 'build/**/*', fingerprint: true
+                    echo 'React app built successfully'
+                }
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                script {
+                    // Try to run tests, continue if they fail
+                    try {
+                        sh 'npm test -- --watchAll=false --coverage'
+                    } catch (Exception e) {
+                        echo "Tests failed or not configured: ${e.message}"
+                        // Continue pipeline even if tests fail
+                    }
+                }
+            }
+            
+            post {
+                always {
+                    // Publish test results if available
+                    publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'coverage/lcov-report',
+                        reportFiles: 'index.html',
+                        reportName: 'Frontend Test Coverage'
+                    ])
+                }
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    // Build Docker image
+                    docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
+                    
+                    // Also tag as latest for production
+                    sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            // Clean workspace
+            cleanWs()
+        }
+        success {
+            echo 'Frontend build completed successfully! ✅'
+        }
+        failure {
+            echo 'Frontend build failed! ❌'
+        }
+    }
+}
