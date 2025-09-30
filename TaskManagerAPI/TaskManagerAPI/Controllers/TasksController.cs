@@ -1,8 +1,6 @@
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using TaskManagerAPI.Models;
-using TaskManagerAPI.Services;
+using TaskManagerAPI.Models;      // Add this
+using TaskManagerAPI.Services;   // Add this
 
 namespace TaskManagerAPI.Controllers
 {
@@ -24,36 +22,6 @@ namespace TaskManagerAPI.Controllers
             return Ok(tasks);
         }
 
-        [HttpGet("{id}")]
-        public async Task<ActionResult<TaskItem>> GetTask(int id)
-        {
-            var task = await _taskService.GetTaskById(id);
-            if (task == null) return NotFound();
-            return Ok(task);
-        }
-
-        [HttpPost]
-        public async Task<ActionResult<TaskItem>> CreateTask(TaskItem task)
-        {
-            var createdTask = await _taskService.CreateTask(task);
-            return CreatedAtAction(nameof(GetTask), new { id = createdTask.Id }, createdTask);
-        }
-
-        [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateTask(int id, TaskItem task)
-        {
-            if (id != task.Id) return BadRequest();
-            
-            var updatedTask = await _taskService.UpdateTask(task);
-            return Ok(updatedTask);
-        }
-
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteTask(int id)
-        {
-            var result = await _taskService.DeleteTask(id);
-            if (!result) return NotFound();
-            return NoContent();
-        }
+        // ... other methods
     }
 }
