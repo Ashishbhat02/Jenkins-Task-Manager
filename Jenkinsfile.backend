@@ -94,7 +94,7 @@ pipeline {
     }
     
     environment {
-        PROJECT_PATH = 'TaskManagerAPI/TaskManagerAPI.csproj'   // explicit path to csproj
+        PROJECT_PATH = 'TaskManagerAPI/TaskManagerAPI/TaskManagerAPI.csproj'   // explicit path to csproj
         DOCKER_IMAGE = 'taskmanager-backend'
         DOTNET_CLI_HOME = "${env.WORKSPACE}/.dotnet"           // make dotnet write first-run files here
     }
