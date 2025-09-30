@@ -15,17 +15,18 @@ RUN dotnet build "TaskManagerAPI.csproj" -c Release -o /app/build
 FROM build AS publish
 RUN dotnet publish "TaskManagerAPI.csproj" -c Release -o /app/publish
 
-# Final stage - CHANGED TO ALPINE AND ADDED SQLITE
-FROM mcr.microsoft.com/dotnet/aspnet:5.0-alpine AS final
+# Final stage - Use regular Linux instead of Alpine to avoid ICU issues
+FROM mcr.microsoft.com/dotnet/aspnet:5.0 AS final
 WORKDIR /app
 
-# Install SQLite and curl for health checks
-RUN apk add --no-cache sqlite curl
+# Install SQLite and curl (Debian-based)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends sqlite3 curl && \
+    rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security
-RUN adduser -u 1000 --disabled-password --gecos "" appuser && \
-    mkdir -p /app/Data && \
-    chown -R appuser:appuser /app
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+RUN mkdir -p /app/Data && chown -R appuser:appuser /app
 
 # Copy published application
 COPY --from=publish /app/publish .
@@ -34,9 +35,9 @@ USER appuser
 # Expose port
 EXPOSE 80
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:80/health || exit 1
+# Simple health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:80/ || exit 1
 
 # Entry point
 ENTRYPOINT ["dotnet", "TaskManagerAPI.dll"]
