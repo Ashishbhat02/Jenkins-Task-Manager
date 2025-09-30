@@ -38,6 +38,8 @@ pipeline {
                             sh '''
                                 export DOTNET_ROOT=/home/jenkins/.dotnet
                                 export NUGET_PACKAGES=/home/jenkins/.nuget
+                                mkdir -p $DOTNET_ROOT
+                                mkdir -p $NUGET_PACKAGES
                                 dotnet restore
                                 dotnet build --configuration Release
                                 dotnet test --no-build
