@@ -1,27 +1,15 @@
 pipeline {
     agent any
-    environment {
-        NODE_VERSION = '18.16.0'  // Node version for frontend
-        DOTNET_ROOT = '$PWD/.dotnet'
-    }
-    stages {
 
+    environment {
+        DOTNET_IMAGE = 'mcr.microsoft.com/dotnet/sdk:5.0'
+        NODE_IMAGE = 'node:18'
+    }
+
+    stages {
         stage('Checkout SCM') {
             steps {
                 checkout scm
-            }
-        }
-
-        stage('Setup NVM & Node') {
-            steps {
-                sh '''
-                    export NVM_DIR="$HOME/.nvm"
-                    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-                    nvm install ${NODE_VERSION}
-                    nvm use ${NODE_VERSION}
-                    node -v
-                    npm -v
-                '''
             }
         }
 
@@ -29,13 +17,10 @@ pipeline {
             steps {
                 dir('TaskManagerAPI/TaskManagerAPI') {
                     script {
-                        docker.image('mcr.microsoft.com/dotnet/sdk:5.0').inside('-u $(id -u):$(id -g)') {
+                        docker.image(DOTNET_IMAGE).inside("-u $(id -u):$(id -g)") {
                             sh '''
-                                mkdir -p $DOTNET_ROOT
-                                export DOTNET_ROOT=$DOTNET_ROOT
                                 dotnet restore
                                 dotnet build --configuration Release
-                                dotnet publish -c Release -o publish
                             '''
                         }
                     }
@@ -46,11 +31,14 @@ pipeline {
         stage('Build Frontend') {
             steps {
                 dir('taskmanager-frontend') {
-                    sh '''
-                        npm install
-                        npm run build
-                    '''
-                    archiveArtifacts artifacts: 'build/**', allowEmptyArchive: true
+                    script {
+                        docker.image(NODE_IMAGE).inside {
+                            sh '''
+                                npm install
+                                npm run build
+                            '''
+                        }
+                    }
                 }
             }
         }
@@ -58,39 +46,36 @@ pipeline {
         stage('Run Frontend Tests') {
             steps {
                 dir('taskmanager-frontend') {
-                    sh 'npm test -- --watchAll=false --coverage || true'
-                    publishHTML([allowMissing: true, alwaysLinkToLastBuild: true, 
-                        keepAll: true, reportDir: 'coverage/lcov-report', 
-                        reportFiles: 'index.html', reportName: 'Frontend Test Coverage'])
+                    script {
+                        docker.image(NODE_IMAGE).inside {
+                            sh 'npm test'
+                        }
+                    }
                 }
             }
         }
 
         stage('Docker Build Backend') {
             steps {
-                dir('TaskManagerAPI/TaskManagerAPI') {
-                    sh 'docker build -t taskmanager-backend:latest .'
-                }
+                sh 'docker build -t taskmanager-backend:latest ./TaskManagerAPI/TaskManagerAPI'
             }
         }
 
         stage('Docker Build Frontend') {
             steps {
-                dir('taskmanager-frontend') {
-                    sh 'docker build -t taskmanager-frontend:latest .'
-                }
+                sh 'docker build -t taskmanager-frontend:latest ./taskmanager-frontend'
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                echo 'Deploy to production server (implement your deployment here)'
+                echo 'Deployment step (add your commands here)'
             }
         }
 
         stage('Health Check') {
             steps {
-                echo 'Perform health check (implement your check here)'
+                echo 'Health check step (add your commands here)'
             }
         }
     }
