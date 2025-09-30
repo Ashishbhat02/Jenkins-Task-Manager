@@ -1,5 +1,5 @@
+#nullable enable  // Add this at the top
 using System;
-
 namespace TaskManagerAPI.Models
 {
     public class TaskItem
