@@ -173,13 +173,14 @@
 
 pipeline {
     agent any
-    
+
     environment {
         PROJECT_PATH = 'TaskManagerAPI/TaskManagerAPI/TaskManagerAPI.csproj'
         DOCKER_IMAGE = 'taskmanager-backend'
         DOTNET_CONTAINER = 'mcr.microsoft.com/dotnet/sdk:5.0'
+        DOTNET_CLI_HOME = "${WORKSPACE}/.dotnet"
     }
-    
+
     stages {
         stage('Checkout Code') {
             steps {
@@ -188,8 +189,8 @@ pipeline {
                 sh 'ls -la'
             }
         }
-        
-        stage('Restore & Build & Test') {
+
+        stage('Restore & Build & Test & Publish') {
             agent {
                 docker {
                     image "${DOTNET_CONTAINER}"
@@ -198,31 +199,38 @@ pipeline {
             }
             steps {
                 script {
-                    echo "Using DOTNET CLI container: ${DOTNET_CONTAINER}"
+                    // Ensure DOTNET_CLI_HOME exists and is writable
+                    sh "mkdir -p ${DOTNET_CLI_HOME}"
+                    
+                    // Restore dependencies
                     sh "dotnet restore ${PROJECT_PATH}"
+                    
+                    // Build application
                     sh "dotnet build ${PROJECT_PATH} -c Release --no-restore"
-                    // Run tests, but continue if none exist
+                    
+                    // Run tests (continue even if tests fail)
                     try {
                         sh "dotnet test ${PROJECT_PATH} --verbosity normal --logger trx"
                     } catch (Exception e) {
                         echo "No tests found or tests failed: ${e.message}"
                     }
+                    
+                    // Publish application
                     sh "dotnet publish ${PROJECT_PATH} -c Release -o ./publish --no-restore"
                 }
             }
         }
-        
+
         stage('Build Docker Image') {
             steps {
                 script {
-                    // Build Docker image on host
-                    sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ."
+                    docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
                     sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
                 }
             }
         }
     }
-    
+
     post {
         always {
             archiveArtifacts artifacts: 'publish/**/*', fingerprint: true
