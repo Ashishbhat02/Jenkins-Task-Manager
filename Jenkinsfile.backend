@@ -85,18 +85,99 @@
 
 // UPDATE CODE 
 
+// pipeline {
+//     agent {
+//         docker {
+//             image 'mcr.microsoft.com/dotnet/sdk:5.0'
+//             reuseNode true
+//         }
+//     }
+    
+//     environment {
+//         PROJECT_PATH = 'TaskManagerAPI/TaskManagerAPI/TaskManagerAPI.csproj'   // explicit path to csproj
+//         DOCKER_IMAGE = 'taskmanager-backend'
+//         DOTNET_CLI_HOME = "${env.WORKSPACE}/.dotnet"           // make dotnet write first-run files here
+//     }
+    
+//     stages {
+//         stage('Checkout Code') {
+//             steps {
+//                 checkout scm
+//                 sh 'pwd'
+//                 sh 'ls -la'
+//             }
+//         }
+        
+//         stage('Restore Dependencies') {
+//             steps {
+//                 sh '''
+//                   set -e
+//                   echo "Using DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
+//                   mkdir -p "$DOTNET_CLI_HOME"
+//                   # optional: try to make it writable for common container UIDs used by Jenkins
+//                   chown -R 111:113 "$DOTNET_CLI_HOME" || true
+//                   dotnet restore "${PROJECT_PATH}"
+//                 '''
+//             }
+//         }
+        
+//         stage('Build Application') {
+//             steps {
+//                 sh "dotnet build \"${PROJECT_PATH}\" -c Release --no-restore"
+//             }
+//         }
+        
+//         stage('Run Tests') {
+//             steps {
+//                 script {
+//                     try {
+//                         sh "dotnet test \"${PROJECT_PATH}\" --verbosity normal --logger trx"
+//                     } catch (Exception e) {
+//                         echo "No tests found or tests failed: ${e.message}"
+//                         // Continue pipeline even if tests fail
+//                     }
+//                 }
+//             }
+//         }
+        
+//         stage('Publish Application') {
+//             steps {
+//                 sh "dotnet publish \"${PROJECT_PATH}\" -c Release -o ./publish --no-restore"
+//             }
+//         }
+        
+//         stage('Build Docker Image') {
+//             steps {
+//                 script {
+//                     docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
+//                     sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
+//                 }
+//             }
+//         }
+//     }
+    
+//     post {
+//         always {
+//             archiveArtifacts artifacts: 'publish/**/*', fingerprint: true
+//             cleanWs()
+//         }
+//         success {
+//             echo 'Backend build completed successfully! ✅'
+//         }
+//         failure {
+//             echo 'Backend build failed! ❌'
+//         }
+//     }
+// }
+
+
 pipeline {
-    agent {
-        docker {
-            image 'mcr.microsoft.com/dotnet/sdk:5.0'
-            reuseNode true
-        }
-    }
+    agent any
     
     environment {
-        PROJECT_PATH = 'TaskManagerAPI/TaskManagerAPI/TaskManagerAPI.csproj'   // explicit path to csproj
+        PROJECT_PATH = 'TaskManagerAPI/TaskManagerAPI/TaskManagerAPI.csproj'
         DOCKER_IMAGE = 'taskmanager-backend'
-        DOTNET_CLI_HOME = "${env.WORKSPACE}/.dotnet"           // make dotnet write first-run files here
+        DOTNET_CONTAINER = 'mcr.microsoft.com/dotnet/sdk:5.0'
     }
     
     stages {
@@ -108,48 +189,34 @@ pipeline {
             }
         }
         
-        stage('Restore Dependencies') {
-            steps {
-                sh '''
-                  set -e
-                  echo "Using DOTNET_CLI_HOME=$DOTNET_CLI_HOME"
-                  mkdir -p "$DOTNET_CLI_HOME"
-                  # optional: try to make it writable for common container UIDs used by Jenkins
-                  chown -R 111:113 "$DOTNET_CLI_HOME" || true
-                  dotnet restore "${PROJECT_PATH}"
-                '''
-            }
-        }
-        
-        stage('Build Application') {
-            steps {
-                sh "dotnet build \"${PROJECT_PATH}\" -c Release --no-restore"
-            }
-        }
-        
-        stage('Run Tests') {
-            steps {
-                script {
-                    try {
-                        sh "dotnet test \"${PROJECT_PATH}\" --verbosity normal --logger trx"
-                    } catch (Exception e) {
-                        echo "No tests found or tests failed: ${e.message}"
-                        // Continue pipeline even if tests fail
-                    }
+        stage('Restore & Build & Test') {
+            agent {
+                docker {
+                    image "${DOTNET_CONTAINER}"
+                    reuseNode true
                 }
             }
-        }
-        
-        stage('Publish Application') {
             steps {
-                sh "dotnet publish \"${PROJECT_PATH}\" -c Release -o ./publish --no-restore"
+                script {
+                    echo "Using DOTNET CLI container: ${DOTNET_CONTAINER}"
+                    sh "dotnet restore ${PROJECT_PATH}"
+                    sh "dotnet build ${PROJECT_PATH} -c Release --no-restore"
+                    // Run tests, but continue if none exist
+                    try {
+                        sh "dotnet test ${PROJECT_PATH} --verbosity normal --logger trx"
+                    } catch (Exception e) {
+                        echo "No tests found or tests failed: ${e.message}"
+                    }
+                    sh "dotnet publish ${PROJECT_PATH} -c Release -o ./publish --no-restore"
+                }
             }
         }
         
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
+                    // Build Docker image on host
+                    sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ."
                     sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
                 }
             }
