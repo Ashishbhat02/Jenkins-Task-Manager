@@ -4,7 +4,6 @@ pipeline {
     environment {
         DOTNET_ROOT = "${WORKSPACE}/.dotnet"
         NUGET_PACKAGES = "${WORKSPACE}/.nuget"
-        HOME = "${WORKSPACE}"
     }
 
     stages {
@@ -22,6 +21,7 @@ pipeline {
                     mkdir -p $DOTNET_ROOT
                     mkdir -p $NUGET_PACKAGES
                     chmod -R 775 $DOTNET_ROOT $NUGET_PACKAGES
+                    chown -R 111:113 $DOTNET_ROOT $NUGET_PACKAGES
                 '''
             }
         }
@@ -30,23 +30,15 @@ pipeline {
             steps {
                 dir('TaskManagerAPI/TaskManagerAPI') {
                     script {
-                        def uid = sh(script: 'id -u', returnStdout: true).trim()
-                        def gid = sh(script: 'id -g', returnStdout: true).trim()
-
                         withDockerContainer(
                             image: 'mcr.microsoft.com/dotnet/sdk:5.0',
-                            args: "-u ${uid}:${gid} \
-                                   -v $WORKSPACE/.dotnet:/home/jenkins/.dotnet \
-                                   -v $WORKSPACE/.nuget:/home/jenkins/.nuget"
+                            args: '-u 0:0 -v $WORKSPACE/.dotnet:/home/jenkins/.dotnet -v $WORKSPACE/.nuget:/home/jenkins/.nuget'
                         ) {
                             sh '''
                                 export DOTNET_ROOT=/home/jenkins/.dotnet
                                 export NUGET_PACKAGES=/home/jenkins/.nuget
-                                mkdir -p $DOTNET_ROOT
-                                mkdir -p $NUGET_PACKAGES
                                 dotnet restore
                                 dotnet build --configuration Release
-                                dotnet test --no-build
                             '''
                         }
                     }
@@ -67,39 +59,25 @@ pipeline {
 
         stage('Docker Build Backend') {
             steps {
-                dir('TaskManagerAPI') {
-                    sh '''
-                        docker build -t taskmanager-backend:latest .
-                    '''
-                }
+                sh 'docker build -t taskmanager-backend ./TaskManagerAPI/TaskManagerAPI'
             }
         }
 
         stage('Docker Build Frontend') {
             steps {
-                dir('TaskManagerFrontend') {
-                    sh '''
-                        docker build -t taskmanager-frontend:latest .
-                    '''
-                }
+                sh 'docker build -t taskmanager-frontend ./TaskManagerFrontend'
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                sh '''
-                    echo "Deploying backend and frontend containers to production..."
-                    # Add your deployment commands here (docker-compose, kubectl, etc.)
-                '''
+                echo 'Deploy steps go here'
             }
         }
 
         stage('Health Check') {
             steps {
-                sh '''
-                    echo "Performing health checks..."
-                    # Add your health check scripts here
-                '''
+                echo 'Health check steps go here'
             }
         }
     }
@@ -107,10 +85,12 @@ pipeline {
     post {
         always {
             cleanWs()
-            echo "✅ Pipeline finished"
+        }
+        success {
+            echo '✅ Pipeline finished successfully!'
         }
         failure {
-            echo "❌ Pipeline failed, check logs for details"
+            echo '❌ Pipeline failed, check logs for details'
         }
     }
 }
