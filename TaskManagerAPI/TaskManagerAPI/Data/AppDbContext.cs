@@ -1,22 +1,14 @@
 using Microsoft.EntityFrameworkCore;
-using TaskManagerAPI.Models;
+using TaskManagerAPI.Models;  // Add this using directive
 
 namespace TaskManagerAPI.Data
 {
-    public class ApplicationDbContext : DbContext
+    public class AppDbContext : DbContext
     {
-        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
         }
 
-        public DbSet<TaskItem> Tasks { get; set; }
-
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-            if (!optionsBuilder.IsConfigured)
-            {
-                optionsBuilder.UseSqlite("Data Source=Data/tasks.db");
-            }
-        }
+        public DbSet<TaskItem> TaskItems { get; set; }
     }
 }
