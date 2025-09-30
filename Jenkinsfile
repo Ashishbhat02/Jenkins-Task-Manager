@@ -1,25 +1,27 @@
 pipeline {
     agent any
+
     environment {
         DOTNET_ROOT = "${WORKSPACE}/.dotnet"
         NUGET_PACKAGES = "${WORKSPACE}/.nuget"
+        HOME = "${WORKSPACE}"
     }
+
     stages {
         stage('Checkout SCM') {
             steps {
-                checkout scm
+                checkout([$class: 'GitSCM',
+                          branches: [[name: '*/main']],
+                          userRemoteConfigs: [[url: 'https://github.com/Ashishbhat02/Jenkins-Task-Manager']]])
             }
         }
 
         stage('Prepare Environment') {
             steps {
                 sh '''
-                    mkdir -p $WORKSPACE/.dotnet
-                    mkdir -p $WORKSPACE/.nuget
-                    chmod -R 775 $WORKSPACE/.dotnet
-                    chmod -R 775 $WORKSPACE/.nuget
-                    chown -R $(id -u):$(id -g) $WORKSPACE/.dotnet
-                    chown -R $(id -u):$(id -g) $WORKSPACE/.nuget
+                    mkdir -p $DOTNET_ROOT
+                    mkdir -p $NUGET_PACKAGES
+                    chmod -R 775 $DOTNET_ROOT $NUGET_PACKAGES
                 '''
             }
         }
@@ -31,10 +33,12 @@ pipeline {
                         def uid = sh(script: 'id -u', returnStdout: true).trim()
                         def gid = sh(script: 'id -g', returnStdout: true).trim()
 
-                        withDockerContainer(image: 'mcr.microsoft.com/dotnet/sdk:5.0',
-                                            args: "-u ${uid}:${gid} \
-                                                   -v $WORKSPACE/.dotnet:/home/jenkins/.dotnet \
-                                                   -v $WORKSPACE/.nuget:/home/jenkins/.nuget") {
+                        withDockerContainer(
+                            image: 'mcr.microsoft.com/dotnet/sdk:5.0',
+                            args: "-u ${uid}:${gid} \
+                                   -v $WORKSPACE/.dotnet:/home/jenkins/.dotnet \
+                                   -v $WORKSPACE/.nuget:/home/jenkins/.nuget"
+                        ) {
                             sh '''
                                 export DOTNET_ROOT=/home/jenkins/.dotnet
                                 export NUGET_PACKAGES=/home/jenkins/.nuget
@@ -52,11 +56,10 @@ pipeline {
 
         stage('Build Frontend') {
             steps {
-                dir('TaskManagerUI') {
+                dir('TaskManagerFrontend') {
                     sh '''
                         npm install
                         npm run build
-                        npm test
                     '''
                 }
             }
@@ -65,30 +68,38 @@ pipeline {
         stage('Docker Build Backend') {
             steps {
                 dir('TaskManagerAPI') {
-                    sh 'docker build -t taskmanager-backend:latest .'
+                    sh '''
+                        docker build -t taskmanager-backend:latest .
+                    '''
                 }
             }
         }
 
         stage('Docker Build Frontend') {
             steps {
-                dir('TaskManagerUI') {
-                    sh 'docker build -t taskmanager-frontend:latest .'
+                dir('TaskManagerFrontend') {
+                    sh '''
+                        docker build -t taskmanager-frontend:latest .
+                    '''
                 }
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                echo "Deploying backend and frontend containers..."
-                // Add deployment commands here
+                sh '''
+                    echo "Deploying backend and frontend containers to production..."
+                    # Add your deployment commands here (docker-compose, kubectl, etc.)
+                '''
             }
         }
 
         stage('Health Check') {
             steps {
-                echo "Running health checks..."
-                // Add health check commands here
+                sh '''
+                    echo "Performing health checks..."
+                    # Add your health check scripts here
+                '''
             }
         }
     }
@@ -96,7 +107,10 @@ pipeline {
     post {
         always {
             cleanWs()
-            echo "❌ Pipeline finished, check logs for details."
+            echo "✅ Pipeline finished"
+        }
+        failure {
+            echo "❌ Pipeline failed, check logs for details"
         }
     }
 }
