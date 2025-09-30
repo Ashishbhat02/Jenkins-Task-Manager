@@ -19,9 +19,9 @@ pipeline {
                     script {
                         docker.image('mcr.microsoft.com/dotnet/sdk:5.0').inside {
                             sh '''
-                                export DOTNET_ROOT=$WORKSPACE/.dotnet
+                                export DOTNET_ROOT=/tmp/dotnet
                                 mkdir -p $DOTNET_ROOT
-                                export HOME=$WORKSPACE
+                                export HOME=/tmp
                                 dotnet restore
                                 dotnet build --configuration Release
                                 dotnet publish -c Release -o publish
