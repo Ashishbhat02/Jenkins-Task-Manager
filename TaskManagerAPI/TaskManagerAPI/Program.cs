@@ -4,52 +4,77 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using TaskManagerAPI.Data;
+using System;
 
-var builder = WebApplication.CreateBuilder(args);
-
-// Add services to the container.
-builder.Services.AddControllers();
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite("Data Source=Data/tasks.db"));
-
-builder.Services.AddCors(options =>
+namespace TaskManagerAPI
 {
-    options.AddPolicy("AllowAll", policy =>
+    public class Program
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+        public static void Main(string[] args)
+        {
+            var host = CreateHostBuilder(args).Build();
 
-var app = builder.Build();
+            // Database initialization
+            using (var scope = host.Services.CreateScope())
+            {
+                var services = scope.ServiceProvider;
+                try
+                {
+                    var context = services.GetRequiredService<ApplicationDbContext>();
+                    context.Database.EnsureCreated();
+                    Console.WriteLine("✅ Database created successfully!");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"❌ Database creation failed: {ex.Message}");
+                }
+            }
 
-// Database initialization
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    try
-    {
-        var context = services.GetRequiredService<ApplicationDbContext>();
-        context.Database.EnsureCreated();
-        System.Console.WriteLine("✅ Database created successfully!");
-    }
-    catch (System.Exception ex)
-    {
-        System.Console.WriteLine($"❌ Database creation failed: {ex.Message}");
+            host.Run();
+        }
+
+        public static IHostBuilder CreateHostBuilder(string[] args) =>
+            Host.CreateDefaultBuilder(args)
+                .ConfigureWebHostDefaults(webBuilder =>
+                {
+                    webBuilder.ConfigureServices((context, services) =>
+                    {
+                        // Add services to the container.
+                        services.AddControllers();
+                        services.AddDbContext<ApplicationDbContext>(options =>
+                            options.UseSqlite("Data Source=Data/tasks.db"));
+
+                        services.AddCors(options =>
+                        {
+                            options.AddPolicy("AllowAll", policy =>
+                            {
+                                policy.AllowAnyOrigin()
+                                      .AllowAnyMethod()
+                                      .AllowAnyHeader();
+                            });
+                        });
+                    });
+
+                    webBuilder.Configure(app =>
+                    {
+                        var env = app.ApplicationServices.GetRequiredService<IWebHostEnvironment>();
+
+                        // Configure the HTTP request pipeline.
+                        if (env.IsDevelopment())
+                        {
+                            app.UseDeveloperExceptionPage();
+                        }
+
+                        app.UseCors("AllowAll");
+                        app.UseRouting();
+                        app.UseAuthorization();
+                        app.UseEndpoints(endpoints =>
+                        {
+                            endpoints.MapControllers();
+                        });
+
+                        Console.WriteLine("🚀 Backend starting...");
+                    });
+                });
     }
 }
-
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseDeveloperExceptionPage();
-}
-
-app.UseCors("AllowAll");
-app.UseRouting();
-app.UseAuthorization();
-app.MapControllers();
-
-System.Console.WriteLine("🚀 Backend starting...");
-app.Run();
