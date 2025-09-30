@@ -16,14 +16,17 @@ pipeline {
         stage('Build Backend') {
             steps {
                 dir(BACKEND_DIR) {
-                    script{
+                    script {
                         docker.image('mcr.microsoft.com/dotnet/sdk:5.0').inside {
-                            sh 'dotnet restore'
-                            sh 'dotnet build --configuration Release'
-                            sh 'dotnet publish -c Release -o publish'
-
+                            sh '''
+                                export DOTNET_ROOT=$WORKSPACE/.dotnet
+                                mkdir -p $DOTNET_ROOT
+                                export HOME=$WORKSPACE
+                                dotnet restore
+                                dotnet build --configuration Release
+                                dotnet publish -c Release -o publish
+                            '''
                         }
-                    
                     }
                 }
             }
