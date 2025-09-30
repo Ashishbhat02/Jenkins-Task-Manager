@@ -3,13 +3,30 @@ pipeline {
 
     environment {
         DOTNET_IMAGE = 'mcr.microsoft.com/dotnet/sdk:5.0'
-        NODE_IMAGE = 'node:18'
+        NODE_VERSION = '18.16.0'
+        NVM_DIR = "${env.HOME}/.nvm"
     }
 
     stages {
-        stage('Checkout SCM') {
+        stage('Declarative: Checkout SCM') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Setup NVM & Node') {
+            steps {
+                sh '''
+                    export NVM_DIR="$HOME/.nvm"
+                    if [ -s "$NVM_DIR/nvm.sh" ]; then
+                        . "$NVM_DIR/nvm.sh"
+                        nvm install ${NODE_VERSION}
+                        nvm use ${NODE_VERSION}
+                    else
+                        echo "NVM not found, please install NVM first."
+                        exit 1
+                    fi
+                '''
             }
         }
 
@@ -17,7 +34,7 @@ pipeline {
             steps {
                 dir('TaskManagerAPI/TaskManagerAPI') {
                     script {
-                        docker.image(DOTNET_IMAGE).inside("-u $(id -u):$(id -g)") {
+                        docker.image(DOTNET_IMAGE).inside('-u $(id -u):$(id -g)') {
                             sh '''
                                 dotnet restore
                                 dotnet build --configuration Release
@@ -30,27 +47,19 @@ pipeline {
 
         stage('Build Frontend') {
             steps {
-                dir('taskmanager-frontend') {
-                    script {
-                        docker.image(NODE_IMAGE).inside {
-                            sh '''
-                                npm install
-                                npm run build
-                            '''
-                        }
-                    }
+                dir('TaskManagerUI/TaskManagerUI') {
+                    sh '''
+                        npm install
+                        npm run build
+                    '''
                 }
             }
         }
 
         stage('Run Frontend Tests') {
             steps {
-                dir('taskmanager-frontend') {
-                    script {
-                        docker.image(NODE_IMAGE).inside {
-                            sh 'npm test'
-                        }
-                    }
+                dir('TaskManagerUI/TaskManagerUI') {
+                    sh 'npm test'
                 }
             }
         }
@@ -63,19 +72,21 @@ pipeline {
 
         stage('Docker Build Frontend') {
             steps {
-                sh 'docker build -t taskmanager-frontend:latest ./taskmanager-frontend'
+                sh 'docker build -t taskmanager-frontend:latest ./TaskManagerUI/TaskManagerUI'
             }
         }
 
         stage('Deploy to Production') {
             steps {
-                echo 'Deployment step (add your commands here)'
+                echo 'Deploying to production...'
+                // Add your deployment commands here
             }
         }
 
         stage('Health Check') {
             steps {
-                echo 'Health check step (add your commands here)'
+                echo 'Performing health check...'
+                // Add health check commands here
             }
         }
     }
@@ -83,7 +94,7 @@ pipeline {
     post {
         always {
             cleanWs()
-            echo '❌ Pipeline finished, check logs for details.'
+            echo "❌ Pipeline finished, check logs for details."
         }
     }
 }
