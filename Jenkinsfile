@@ -17,10 +17,17 @@ pipeline {
             steps {
                 dir(BACKEND_DIR) {
                     script {
-                        docker.image('mcr.microsoft.com/dotnet/sdk:5.0').inside {
-                            sh 'dotnet restore'
-                            sh 'dotnet build --configuration Release'
-                            sh 'dotnet publish -c Release -o publish'
+                        docker.image('mcr.microsoft.com/dotnet/sdk:5.0').inside("-u $(id -u):$(id -g)") {
+                    // Set DOTNET_ROOT to workspace folder
+                            sh '''
+                                export DOTNET_ROOT=$PWD/.dotnet
+                                mkdir -p $DOTNET_ROOT
+                                export PATH=$DOTNET_ROOT:$PATH
+        
+                                dotnet restore
+                                dotnet build --configuration Release
+                                dotnet publish -c Release -o publish
+                            '''
                         }
                     }
                 }
