@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using TaskManagerAPI.Models;      // Add this
 using TaskManagerAPI.Services;   // Add this
+using System.Collections.Generic;  // Add this for List<>
+using System.Threading.Tasks; 
 
 namespace TaskManagerAPI.Controllers
 {
