@@ -2,7 +2,6 @@ pipeline {
     agent any
     
     environment {
-        // Environment variables
         BACKEND_IMAGE = 'taskmanager-backend'
         FRONTEND_IMAGE = 'taskmanager-frontend'
     }
@@ -15,36 +14,46 @@ pipeline {
                     echo "📦 Repository cloned successfully"
                     echo "📁 Current directory structure:"
                     ls -la
-                    echo "📁 Backend folder:"
-                    ls -la TaskManagerAPI/ || echo "Backend folder not found"
-                    echo "📁 Frontend folder:"
-                    ls -la TaskManagerFrontend/ || echo "Frontend folder not found"
+                    echo "📁 Backend folder contents:"
+                    ls -la TaskManagerAPI/TaskManagerAPI/ || echo "Backend folder not found"
+                    echo "📁 Frontend folder contents:"
+                    ls -la taskmanager-frontend/ || echo "Frontend folder not found"
                 '''
             }
         }
         
-        stage('Build Backend') {
+        stage('Build Backend with Docker') {
             steps {
-                dir('TaskManagerAPI/TaskManagerAPI') {
-                    sh '''
-                        echo "🔨 Building .NET Backend..."
-                        dotnet restore
-                        dotnet build --configuration Release
-                        echo "✅ Backend build completed"
-                    '''
+                script {
+                    echo "🔨 Building .NET Backend with Docker..."
+                    dir('TaskManagerAPI/TaskManagerAPI') {
+                        // Use Docker container with .NET pre-installed
+                        docker.image('mcr.microsoft.com/dotnet/sdk:5.0').inside {
+                            sh '''
+                                dotnet restore
+                                dotnet build --configuration Release
+                                echo "✅ Backend build completed"
+                            '''
+                        }
+                    }
                 }
             }
         }
         
-        stage('Build Frontend') {
+        stage('Build Frontend with Docker') {
             steps {
-                dir('TaskManagerFrontend') {
-                    sh '''
-                        echo "🔨 Building React Frontend..."
-                        npm install
-                        npm run build
-                        echo "✅ Frontend build completed"
-                    '''
+                script {
+                    echo "🔨 Building React Frontend with Docker..."
+                    dir('taskmanager-frontend') {
+                        // Use Docker container with Node.js pre-installed
+                        docker.image('node:16-alpine').inside {
+                            sh '''
+                                npm install
+                                npm run build
+                                echo "✅ Frontend build completed"
+                            '''
+                        }
+                    }
                 }
             }
         }
@@ -59,8 +68,8 @@ pipeline {
                         docker.build("${BACKEND_IMAGE}:latest")
                     }
                     
-                    // Build frontend Docker image
-                    dir('TaskManagerFrontend') {
+                    // Build frontend Docker image  
+                    dir('taskmanager-frontend') {
                         docker.build("${FRONTEND_IMAGE}:latest")
                     }
                     
@@ -105,10 +114,20 @@ pipeline {
                     // Check backend health
                     sh '''
                         echo "🔍 Checking backend API..."
-                        if curl -f http://localhost:5000/api/tasks; then
-                            echo "✅ Backend is healthy"
-                        else
-                            echo "❌ Backend health check failed"
+                        max_attempts=10
+                        attempt=1
+                        while [ $attempt -le $max_attempts ]; do
+                            if curl -f http://localhost:5000/api/tasks; then
+                                echo "✅ Backend is healthy"
+                                break
+                            else
+                                echo "⏳ Backend not ready yet (attempt $attempt/$max_attempts)"
+                                sleep 10
+                                attempt=$((attempt + 1))
+                            fi
+                        done
+                        if [ $attempt -gt $max_attempts ]; then
+                            echo "❌ Backend health check failed after $max_attempts attempts"
                             exit 1
                         fi
                     '''
@@ -146,9 +165,6 @@ pipeline {
         }
         failure {
             echo "❌ DEPLOYMENT FAILED - Check the logs above for details"
-        }
-        unstable {
-            echo "⚠️ Pipeline marked as unstable"
         }
     }
 }
