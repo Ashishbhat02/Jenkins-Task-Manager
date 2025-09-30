@@ -1,15 +1,15 @@
 pipeline {
     agent {
         docker {
-            image 'node:16-alpine'
+            image 'node:18-alpine'
             reuseNode true
         }
     }
-    
+
     environment {
         DOCKER_IMAGE = 'taskmanager-frontend'
     }
-    
+
     stages {
         stage('Checkout Code') {
             steps {
@@ -18,20 +18,22 @@ pipeline {
                 sh 'ls -la'
             }
         }
-        
+
         stage('Install Dependencies') {
             steps {
                 dir('taskmanager-frontend') {
+                    // Use workspace-local npm cache to avoid permission issues
+                    sh 'npm config set cache ./npm-cache'
                     sh 'npm install'
                 }
             }
             post {
                 success {
-                    echo 'Dependencies installed successfully'
+                    echo 'Dependencies installed successfully ✅'
                 }
             }
         }
-        
+
         stage('Code Quality Check') {
             steps {
                 dir('taskmanager-frontend') {
@@ -45,7 +47,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Build React App') {
             steps {
                 dir('taskmanager-frontend') {
@@ -55,11 +57,11 @@ pipeline {
             post {
                 success {
                     archiveArtifacts artifacts: 'taskmanager-frontend/build/**/*', fingerprint: true
-                    echo 'React app built successfully'
+                    echo 'React app built successfully ✅'
                 }
             }
         }
-        
+
         stage('Run Tests') {
             steps {
                 dir('taskmanager-frontend') {
@@ -85,17 +87,18 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Build Docker Image') {
             steps {
                 script {
+                    // Build Docker image from the frontend folder
                     docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}", './taskmanager-frontend')
                     sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
                 }
             }
         }
     }
-    
+
     post {
         always {
             cleanWs()
