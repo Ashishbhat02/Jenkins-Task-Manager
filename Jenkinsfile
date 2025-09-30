@@ -20,6 +20,7 @@ pipeline {
                     sh 'dotnet restore'
                     sh 'dotnet build --configuration Release'
                     sh 'dotnet publish -c Release -o publish'
+                    }
                 }
             }
         }
