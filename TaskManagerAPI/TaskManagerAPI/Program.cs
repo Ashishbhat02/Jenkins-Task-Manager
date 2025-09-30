@@ -1,6 +1,7 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using TaskManagerAPI.Data;
 
@@ -23,19 +24,19 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Database initialization - THIS IS CRITICAL
+// Database initialization
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<ApplicationDbContext>();
-        context.Database.EnsureCreated(); // Creates database and tables
-        Console.WriteLine("✅ Database created successfully!");
+        context.Database.EnsureCreated();
+        System.Console.WriteLine("✅ Database created successfully!");
     }
-    catch (Exception ex)
+    catch (System.Exception ex)
     {
-        Console.WriteLine($"❌ Database creation failed: {ex.Message}");
+        System.Console.WriteLine($"❌ Database creation failed: {ex.Message}");
     }
 }
 
@@ -50,5 +51,5 @@ app.UseRouting();
 app.UseAuthorization();
 app.MapControllers();
 
-Console.WriteLine("🚀 Backend starting...");
+System.Console.WriteLine("🚀 Backend starting...");
 app.Run();
