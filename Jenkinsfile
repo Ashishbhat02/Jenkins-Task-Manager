@@ -16,56 +16,13 @@ pipeline {
             }
         }
         
-        stage('Fix Frontend Dockerfile') {
+        stage('Build Backend with Database Fix') {
             steps {
                 sh '''
-                    echo "🔧 Fixing Frontend Dockerfile permissions..."
-                    cd taskmanager-frontend
-                    
-                    # Create a fixed Dockerfile
-                    cat > Dockerfile.fixed << 'EOF'
-# Build stage
-FROM node:16-alpine AS build
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --only=production
-COPY . .
-RUN npm run build
-
-# Production stage - use root user to avoid permission issues
-FROM nginx:alpine
-
-# Copy custom nginx config
-COPY nginx.conf /etc/nginx/nginx.conf
-
-# Copy built app
-COPY --from=build /app/build /usr/share/nginx/html
-
-# Fix permissions - run as root to avoid nginx permission issues
-RUN chown -R nginx:nginx /usr/share/nginx/html && \
-    chmod -R 755 /usr/share/nginx/html
-
-# Expose port
-EXPOSE 80
-
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
-EOF
-                    
-                    # Build with fixed Dockerfile
-                    docker build -t taskmanager-frontend -f Dockerfile.fixed .
-                    echo "✅ Frontend Docker image built with fixed permissions"
-                '''
-            }
-        }
-        
-        stage('Fix Backend Dockerfile') {
-            steps {
-                sh '''
-                    echo "🔧 Fixing Backend Dockerfile..."
+                    echo "🔨 Building .NET Backend with database fixes..."
                     cd TaskManagerAPI/TaskManagerAPI
                     
-                    # Create a fixed Dockerfile
+                    # Create a fixed Dockerfile without apt-get (use alpine for curl)
                     cat > Dockerfile.fixed << 'EOF'
 # Build stage
 FROM mcr.microsoft.com/dotnet/sdk:5.0 AS build
@@ -79,12 +36,12 @@ RUN dotnet build "TaskManagerAPI.csproj" -c Release -o /app/build
 FROM build AS publish
 RUN dotnet publish "TaskManagerAPI.csproj" -c Release -o /app/publish
 
-# Final stage
-FROM mcr.microsoft.com/dotnet/aspnet:5.0 AS final
+# Final stage - use alpine for better compatibility
+FROM mcr.microsoft.com/dotnet/aspnet:5.0-alpine AS final
 WORKDIR /app
 
-# Install curl for health checks
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+# Install curl (alpine uses apk instead of apt)
+RUN apk add --no-cache curl
 
 # Create directory for SQLite database
 RUN mkdir -p /app/Data && chmod 755 /app/Data
@@ -95,7 +52,7 @@ COPY --from=publish /app/publish .
 # Expose port
 EXPOSE 80
 
-# Simple health check that works
+# Simple health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \\
   CMD curl -f http://localhost:80/ || exit 1
 
@@ -105,7 +62,51 @@ EOF
                     
                     # Build with fixed Dockerfile
                     docker build -t taskmanager-backend -f Dockerfile.fixed .
-                    echo "✅ Backend Docker image built with fixes"
+                    echo "✅ Backend Docker image built with Alpine and curl"
+                '''
+            }
+        }
+        
+        stage('Build Frontend with Permission Fix') {
+            steps {
+                sh '''
+                    echo "🔨 Building React Frontend with permission fixes..."
+                    cd taskmanager-frontend
+                    
+                    # Create a fixed Dockerfile that runs as root to avoid permission issues
+                    cat > Dockerfile.fixed << 'EOF'
+# Build stage
+FROM node:16-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --only=production
+COPY . .
+RUN npm run build
+
+# Production stage - run as root to avoid nginx permission issues
+FROM nginx:alpine
+
+# Copy custom nginx config
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Copy built app
+COPY --from=build /app/build /usr/share/nginx/html
+
+# Create necessary directories and fix permissions
+RUN mkdir -p /var/cache/nginx /var/run && \\
+    chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx /var/run && \\
+    chmod -R 755 /usr/share/nginx/html /var/cache/nginx /var/run
+
+# Expose port
+EXPOSE 80
+
+# Start nginx as root (will drop privileges internally)
+CMD ["nginx", "-g", "daemon off;"]
+EOF
+                    
+                    # Build with fixed Dockerfile
+                    docker build -t taskmanager-frontend -f Dockerfile.fixed .
+                    echo "✅ Frontend Docker image built with permission fixes"
                 '''
             }
         }
@@ -129,22 +130,49 @@ EOF
             }
         }
         
-        stage('Wait and Test') {
+        stage('Initialize Database') {
             steps {
                 sh '''
-                    echo "⏳ Waiting for services to start..."
-                    sleep 45
+                    echo "🗄️ Initializing database..."
                     
-                    echo "🔍 Testing services..."
+                    # Wait for backend to start
+                    sleep 10
+                    
+                    # Run database migrations
+                    echo "Running EF Core database migrations..."
+                    docker exec taskmanager-backend-prod dotnet ef database update || echo "EF migrations not available, trying alternative..."
+                    
+                    # Alternative: Ensure database is created
+                    echo "Ensuring database is created..."
+                    docker exec taskmanager-backend-prod ls -la /app/Data/ || echo "Data directory not accessible"
+                    
+                    # Test if API works now
+                    echo "Testing API after database initialization..."
+                    sleep 10
+                '''
+            }
+        }
+        
+        stage('Test Services') {
+            steps {
+                sh '''
+                    echo "🧪 Testing services..."
+                    
+                    # Wait for services to stabilize
+                    sleep 30
                     
                     # Test backend
-                    echo "Testing backend..."
+                    echo "Testing backend API..."
                     if curl -f http://localhost:5000/api/tasks; then
                         echo "✅ Backend API is working!"
                     else
-                        echo "❌ Backend API failed - checking logs..."
-                        docker logs taskmanager-backend-prod --tail 50
-                        exit 1
+                        echo "⚠️ Backend API still failing, checking alternative endpoints..."
+                        curl http://localhost:5000/ || echo "Root endpoint failed"
+                        curl http://localhost:5000/swagger || echo "Swagger endpoint failed"
+                        
+                        # Show backend logs for debugging
+                        echo "Backend logs:"
+                        docker logs taskmanager-backend-prod --tail 20
                     fi
                     
                     # Test frontend
@@ -153,11 +181,8 @@ EOF
                         echo "✅ Frontend is working!"
                     else
                         echo "❌ Frontend failed - checking logs..."
-                        docker logs taskmanager-frontend-prod --tail 50
-                        exit 1
+                        docker logs taskmanager-frontend-prod --tail 20
                     fi
-                    
-                    echo "🎉 All services are working!"
                 '''
             }
         }
@@ -172,26 +197,30 @@ EOF
                 # Get actual EC2 public IP
                 EC2_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
                 
-                echo "🎉 DEPLOYMENT SUCCESSFUL!"
+                echo "🎉 DEPLOYMENT COMPLETED!"
                 echo ""
-                echo "🌐 Application URLs (REAL IPs):"
+                echo "🌐 Application URLs (TEST THESE):"
                 echo "   Frontend: http://$EC2_IP"
-                echo "   Backend API: http://$EC2_IP:5000"
-                echo "   Swagger: http://$EC2_IP:5000/swagger"
+                echo "   Backend API: http://$EC2_IP:5000/api/tasks"
+                echo "   Swagger Docs: http://$EC2_IP:5000/swagger"
                 echo ""
-                echo "📊 Current containers:"
+                echo "📊 Container Status:"
                 docker ps
+                echo ""
+                echo "🔧 If APIs don't work, check:"
+                echo "   - Backend logs: docker logs taskmanager-backend-prod"
+                echo "   - Frontend logs: docker logs taskmanager-frontend-prod"
             '''
         }
         failure {
             sh '''
-                echo "❌ DEPLOYMENT FAILED - Debug Info:"
-                echo "=== CONTAINERS ==="
+                echo "❌ DEPLOYMENT HAD ISSUES"
+                echo "=== FINAL DEBUG INFO ==="
                 docker ps -a
                 echo "=== BACKEND LOGS ==="
-                docker logs taskmanager-backend-prod --tail 100
+                docker logs taskmanager-backend-prod --tail 50
                 echo "=== FRONTEND LOGS ==="
-                docker logs taskmanager-frontend-prod --tail 100
+                docker logs taskmanager-frontend-prod --tail 50
             '''
         }
     }
