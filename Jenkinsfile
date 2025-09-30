@@ -45,13 +45,13 @@ pipeline {
                 sh '''
                     echo "🚀 Deploying application..."
                     
-                    # Stop old containers
+                    # Stop and remove old containers
                     docker-compose -f docker-compose.prod.yml down || true
                     
-                    # Remove unused images
+                    # Clean up
                     docker system prune -f || true
                     
-                    # Deploy new version
+                    # Deploy
                     docker-compose -f docker-compose.prod.yml up -d
                     
                     echo "✅ Application deployed"
@@ -59,37 +59,72 @@ pipeline {
             }
         }
         
-        stage('Health Check') {
+        stage('Debug Services') {
             steps {
                 sh '''
-                    echo "🏥 Checking application health..."
+                    echo "🔍 Debugging services..."
                     
-                    # Wait for services to start
-                    sleep 30
+                    # Wait a bit for services to start
+                    sleep 10
                     
-                    # Check containers
-                    echo "📊 Running containers:"
-                    docker ps
+                    echo "=== CONTAINER STATUS ==="
+                    docker ps -a
                     
-                    # Check backend
-                    echo "🔍 Testing backend API..."
-                    if curl -f http://localhost:5000/api/tasks; then
-                        echo "✅ Backend is working"
-                    else
-                        echo "❌ Backend check failed"
-                        exit 1
-                    fi
+                    echo "=== BACKEND LOGS ==="
+                    docker logs taskmanager-backend-prod --tail 50 || echo "Could not get backend logs"
                     
-                    # Check frontend
-                    echo "🔍 Testing frontend..."
-                    if curl -f http://localhost:80; then
-                        echo "✅ Frontend is working"
-                    else
-                        echo "❌ Frontend check failed"
-                        exit 1
-                    fi
+                    echo "=== FRONTEND LOGS ==="
+                    docker logs taskmanager-frontend-prod --tail 50 || echo "Could not get frontend logs"
                     
-                    echo "🎉 All services are healthy!"
+                    echo "=== BACKEND DETAILS ==="
+                    docker inspect taskmanager-backend-prod | grep -A 10 -B 5 "Health" || echo "No health info"
+                    
+                    echo "=== NETWORK CHECK ==="
+                    docker network ls
+                    docker inspect main_default || echo "Network not found"
+                '''
+            }
+        }
+        
+        stage('Test Backend API') {
+            steps {
+                sh '''
+                    echo "🧪 Testing Backend API..."
+                    
+                    # Try multiple endpoints
+                    echo "Testing /health endpoint..."
+                    curl -v http://localhost:5000/health || echo "Health endpoint failed"
+                    
+                    echo "Testing /swagger endpoint..."
+                    curl -v http://localhost:5000/swagger || echo "Swagger endpoint failed"
+                    
+                    echo "Testing /api/tasks endpoint..."
+                    curl -v http://localhost:5000/api/tasks || echo "Tasks endpoint failed"
+                    
+                    # Check if backend is actually running
+                    echo "Backend container processes:"
+                    docker top taskmanager-backend-prod || echo "Cannot check processes"
+                '''
+            }
+        }
+        
+        stage('Fix and Retry') {
+            steps {
+                sh '''
+                    echo "🔧 Attempting fixes..."
+                    
+                    # Check if SQLite database exists and is accessible
+                    echo "Checking database..."
+                    docker exec taskmanager-backend-prod ls -la /app/Data/ || echo "Cannot access Data directory"
+                    
+                    # Restart backend with more time to initialize
+                    echo "Restarting backend..."
+                    docker restart taskmanager-backend-prod
+                    sleep 20
+                    
+                    # Test again
+                    echo "Retesting API..."
+                    curl -f http://localhost:5000/api/tasks && echo "✅ Backend is now working!" || echo "❌ Backend still failing"
                 '''
             }
         }
@@ -97,24 +132,29 @@ pipeline {
     
     post {
         always {
-            echo "🧹 Cleaning up..."
+            echo "🧹 Pipeline completed"
         }
         success {
             sh '''
                 echo "🎉 DEPLOYMENT SUCCESSFUL!"
                 echo ""
                 echo "🌐 Application URLs:"
-                echo "   Frontend: http://$(curl -s ifconfig.me)"
-                echo "   Backend API: http://$(curl -s ifconfig.me):5000"
-                echo "   Swagger: http://$(curl -s ifconfig.me):5000/swagger"
+                echo "   Frontend: http://YOUR_EC2_IP"
+                echo "   Backend API: http://YOUR_EC2_IP:5000"
+                echo "   Swagger: http://YOUR_EC2_IP:5000/swagger"
             '''
         }
         failure {
-            echo "❌ DEPLOYMENT FAILED"
             sh '''
-                echo "Debug information:"
+                echo "❌ DEPLOYMENT FAILED - Detailed Debug Info:"
+                echo "=== FINAL CONTAINER STATUS ==="
                 docker ps -a
-                docker images
+                echo "=== BACKEND LOGS (LAST 100 LINES) ==="
+                docker logs taskmanager-backend-prod --tail 100 || echo "No backend logs"
+                echo "=== FRONTEND LOGS (LAST 100 LINES) ==="
+                docker logs taskmanager-frontend-prod --tail 100 || echo "No frontend logs"
+                echo "=== DOCKER NETWORK INFO ==="
+                docker network inspect main_default || echo "Network not found"
             '''
         }
     }
