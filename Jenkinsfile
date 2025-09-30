@@ -17,9 +17,21 @@ pipeline {
             steps {
                 dir('TaskManagerAPI/TaskManagerAPI') {
                     script {
-                        docker.image(DOTNET_IMAGE).inside("-v ${DOTNET_HOME}:/root/.dotnet -v ${NUGET_HOME}:/root/.nuget") {
-                            sh 'dotnet restore'
-                            sh 'dotnet build --configuration Release'
+                        // Run Docker as Jenkins user
+                        def uid = sh(script: 'id -u', returnStdout: true).trim()
+                        def gid = sh(script: 'id -g', returnStdout: true).trim()
+
+                        docker.image(DOTNET_IMAGE).inside(
+                            "-u ${uid}:${gid} " +
+                            "-v ${DOTNET_HOME}:/home/jenkins/.dotnet " +
+                            "-v ${NUGET_HOME}:/home/jenkins/.nuget"
+                        ) {
+                            sh '''
+                                export DOTNET_ROOT=/home/jenkins/.dotnet
+                                export NUGET_PACKAGES=/home/jenkins/.nuget
+                                dotnet restore
+                                dotnet build --configuration Release
+                            '''
                         }
                     }
                 }
@@ -70,14 +82,12 @@ pipeline {
         stage('Deploy to Production') {
             steps {
                 echo "Deploying backend and frontend Docker images..."
-                // Add deployment commands here
             }
         }
 
         stage('Health Check') {
             steps {
                 echo "Checking application health..."
-                // Add health check commands here
             }
         }
     }
