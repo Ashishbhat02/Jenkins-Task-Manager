@@ -34,7 +34,7 @@ pipeline {
                         # Install nvm
                         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.6/install.sh | bash
                         export NVM_DIR="$HOME/.nvm"
-                        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+                        . "$NVM_DIR/nvm.sh"
 
                         # Install and use Node 18
                         nvm install 18
@@ -58,7 +58,7 @@ pipeline {
                 dir(FRONTEND_DIR) {
                     sh '''
                         export NVM_DIR="$HOME/.nvm"
-                        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+                        . "$NVM_DIR/nvm.sh"
                         nvm use 18
                         npm test -- --watchAll=false --coverage || true
                     '''
