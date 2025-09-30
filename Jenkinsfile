@@ -3,6 +3,8 @@ pipeline {
     environment {
         DOTNET_IMAGE = 'mcr.microsoft.com/dotnet/sdk:5.0'
         NODE_IMAGE = 'node:18.16.0'
+        DOTNET_HOME = "${env.WORKSPACE}/.dotnet"   // Host folder for .NET SDK
+        NUGET_HOME = "${env.WORKSPACE}/.nuget"     // Host folder for NuGet packages
     }
     stages {
         stage('Checkout SCM') {
@@ -15,7 +17,7 @@ pipeline {
             steps {
                 dir('TaskManagerAPI/TaskManagerAPI') {
                     script {
-                        docker.image(DOTNET_IMAGE).inside {
+                        docker.image(DOTNET_IMAGE).inside("-v ${DOTNET_HOME}:/root/.dotnet -v ${NUGET_HOME}:/root/.nuget") {
                             sh 'dotnet restore'
                             sh 'dotnet build --configuration Release'
                         }
@@ -68,14 +70,14 @@ pipeline {
         stage('Deploy to Production') {
             steps {
                 echo "Deploying backend and frontend Docker images..."
-                // Add your deployment commands here
+                // Add deployment commands here
             }
         }
 
         stage('Health Check') {
             steps {
                 echo "Checking application health..."
-                // Add your health check commands here
+                // Add health check commands here
             }
         }
     }
