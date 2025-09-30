@@ -3,8 +3,9 @@ pipeline {
     environment {
         DOTNET_IMAGE = 'mcr.microsoft.com/dotnet/sdk:5.0'
         NODE_IMAGE = 'node:18.16.0'
-        DOTNET_HOME = "${env.WORKSPACE}/.dotnet"   // Host folder for .NET SDK
-        NUGET_HOME = "${env.WORKSPACE}/.nuget"     // Host folder for NuGet packages
+        DOTNET_HOME = "${env.WORKSPACE}/.dotnet"
+        NUGET_HOME = "${env.WORKSPACE}/.nuget"
+        CONTAINER_HOME = "/home/jenkins"
     }
     stages {
         stage('Checkout SCM') {
@@ -17,18 +18,19 @@ pipeline {
             steps {
                 dir('TaskManagerAPI/TaskManagerAPI') {
                     script {
-                        // Run Docker as Jenkins user
                         def uid = sh(script: 'id -u', returnStdout: true).trim()
                         def gid = sh(script: 'id -g', returnStdout: true).trim()
 
                         docker.image(DOTNET_IMAGE).inside(
                             "-u ${uid}:${gid} " +
-                            "-v ${DOTNET_HOME}:/home/jenkins/.dotnet " +
-                            "-v ${NUGET_HOME}:/home/jenkins/.nuget"
+                            "-e HOME=${CONTAINER_HOME} " +
+                            "-v ${DOTNET_HOME}:${CONTAINER_HOME}/.dotnet " +
+                            "-v ${NUGET_HOME}:${CONTAINER_HOME}/.nuget " +
+                            "-w ${WORKSPACE}/TaskManagerAPI/TaskManagerAPI"
                         ) {
                             sh '''
-                                export DOTNET_ROOT=/home/jenkins/.dotnet
-                                export NUGET_PACKAGES=/home/jenkins/.nuget
+                                export DOTNET_ROOT=${HOME}/.dotnet
+                                export NUGET_PACKAGES=${HOME}/.nuget
                                 dotnet restore
                                 dotnet build --configuration Release
                             '''
