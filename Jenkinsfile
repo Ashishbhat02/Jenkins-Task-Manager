@@ -18,14 +18,9 @@ pipeline {
                 dir(BACKEND_DIR) {
                     script {
                         docker.image('mcr.microsoft.com/dotnet/sdk:5.0').inside {
-                            sh '''
-                                export DOTNET_ROOT=/tmp/dotnet
-                                mkdir -p $DOTNET_ROOT
-                                export HOME=/tmp
-                                dotnet restore
-                                dotnet build --configuration Release
-                                dotnet publish -c Release -o publish
-                            '''
+                            sh 'dotnet restore'
+                            sh 'dotnet build --configuration Release'
+                            sh 'dotnet publish -c Release -o publish'
                         }
                     }
                 }
@@ -35,9 +30,24 @@ pipeline {
         stage('Build Frontend') {
             steps {
                 dir(FRONTEND_DIR) {
-                    echo "Building frontend..."
-                    sh 'npm install'
-                    sh 'npm run build'
+                    sh '''
+                        # Install nvm
+                        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.6/install.sh | bash
+                        export NVM_DIR="$HOME/.nvm"
+                        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+                        # Install and use Node 18
+                        nvm install 18
+                        nvm use 18
+
+                        # Verify versions
+                        node -v
+                        npm -v
+
+                        # Install dependencies and build
+                        npm install
+                        npm run build
+                    '''
                     archiveArtifacts artifacts: 'build/**', allowEmptyArchive: true
                 }
             }
@@ -46,8 +56,12 @@ pipeline {
         stage('Run Frontend Tests') {
             steps {
                 dir(FRONTEND_DIR) {
-                    echo "Running frontend tests..."
-                    sh 'npm test -- --watchAll=false --coverage || true'
+                    sh '''
+                        export NVM_DIR="$HOME/.nvm"
+                        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+                        nvm use 18
+                        npm test -- --watchAll=false --coverage || true
+                    '''
                     publishHTML(target: [
                         reportName: 'Frontend Test Coverage',
                         reportDir: 'coverage/lcov-report',
