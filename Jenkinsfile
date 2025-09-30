@@ -1,29 +1,38 @@
 pipeline {
     agent any
-
     environment {
-        FRONTEND_DIR = 'taskmanager-frontend'
-        BACKEND_DIR = 'TaskManagerAPI/TaskManagerAPI'
+        NODE_VERSION = '18.16.0'  // Node version for frontend
+        DOTNET_ROOT = '$PWD/.dotnet'
     }
-
     stages {
-        stage('Checkout Code') {
+
+        stage('Checkout SCM') {
             steps {
-                git branch: 'main', url: 'https://github.com/Ashishbhat02/Jenkins-Task-Manager'
+                checkout scm
+            }
+        }
+
+        stage('Setup NVM & Node') {
+            steps {
+                sh '''
+                    export NVM_DIR="$HOME/.nvm"
+                    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+                    nvm install ${NODE_VERSION}
+                    nvm use ${NODE_VERSION}
+                    node -v
+                    npm -v
+                '''
             }
         }
 
         stage('Build Backend') {
             steps {
-                dir(BACKEND_DIR) {
+                dir('TaskManagerAPI/TaskManagerAPI') {
                     script {
-                        docker.image('mcr.microsoft.com/dotnet/sdk:5.0').inside("-u $(id -u):$(id -g)") {
-                    // Set DOTNET_ROOT to workspace folder
+                        docker.image('mcr.microsoft.com/dotnet/sdk:5.0').inside('-u $(id -u):$(id -g)') {
                             sh '''
-                                export DOTNET_ROOT=$PWD/.dotnet
                                 mkdir -p $DOTNET_ROOT
-                                export PATH=$DOTNET_ROOT:$PATH
-        
+                                export DOTNET_ROOT=$DOTNET_ROOT
                                 dotnet restore
                                 dotnet build --configuration Release
                                 dotnet publish -c Release -o publish
@@ -36,22 +45,8 @@ pipeline {
 
         stage('Build Frontend') {
             steps {
-                dir(FRONTEND_DIR) {
+                dir('taskmanager-frontend') {
                     sh '''
-                        # Install nvm
-                        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.6/install.sh | bash
-                        export NVM_DIR="$HOME/.nvm"
-                        . "$NVM_DIR/nvm.sh"
-
-                        # Install and use Node 18
-                        nvm install 18
-                        nvm use 18
-
-                        # Verify versions
-                        node -v
-                        npm -v
-
-                        # Install dependencies and build
                         npm install
                         npm run build
                     '''
@@ -62,25 +57,18 @@ pipeline {
 
         stage('Run Frontend Tests') {
             steps {
-                dir(FRONTEND_DIR) {
-                    sh '''
-                        export NVM_DIR="$HOME/.nvm"
-                        . "$NVM_DIR/nvm.sh"
-                        nvm use 18
-                        npm test -- --watchAll=false --coverage || true
-                    '''
-                    publishHTML(target: [
-                        reportName: 'Frontend Test Coverage',
-                        reportDir: 'coverage/lcov-report',
-                        allowMissing: true
-                    ])
+                dir('taskmanager-frontend') {
+                    sh 'npm test -- --watchAll=false --coverage || true'
+                    publishHTML([allowMissing: true, alwaysLinkToLastBuild: true, 
+                        keepAll: true, reportDir: 'coverage/lcov-report', 
+                        reportFiles: 'index.html', reportName: 'Frontend Test Coverage'])
                 }
             }
         }
 
         stage('Docker Build Backend') {
             steps {
-                dir(BACKEND_DIR) {
+                dir('TaskManagerAPI/TaskManagerAPI') {
                     sh 'docker build -t taskmanager-backend:latest .'
                 }
             }
@@ -88,7 +76,7 @@ pipeline {
 
         stage('Docker Build Frontend') {
             steps {
-                dir(FRONTEND_DIR) {
+                dir('taskmanager-frontend') {
                     sh 'docker build -t taskmanager-frontend:latest .'
                 }
             }
@@ -96,26 +84,21 @@ pipeline {
 
         stage('Deploy to Production') {
             steps {
-                echo "Deployment stage - add your deployment commands here"
+                echo 'Deploy to production server (implement your deployment here)'
             }
         }
 
         stage('Health Check') {
             steps {
-                echo "Health check stage - add your API or UI health check commands here"
+                echo 'Perform health check (implement your check here)'
             }
         }
     }
 
     post {
-        success {
-            echo "✅ Pipeline completed successfully!"
-        }
-        failure {
-            echo "❌ Pipeline failed! Check logs for details."
-        }
         always {
             cleanWs()
+            echo '❌ Pipeline finished, check logs for details.'
         }
     }
 }
