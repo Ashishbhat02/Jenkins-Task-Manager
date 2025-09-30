@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
-using TaskManagerAPI.Data;  // Make sure this is included
+using TaskManagerAPI.Data;
 using TaskManagerAPI.Services;
 
 namespace TaskManagerAPI
@@ -13,23 +13,10 @@ namespace TaskManagerAPI
         public static void Main(string[] args)
         {
             var host = CreateHostBuilder(args).Build();
-
-            // Database initialization
-            using (var scope = host.Services.CreateScope())
-            {
-                var services = scope.ServiceProvider;
-                try
-                {
-                    var context = services.GetRequiredService<AppDbContext>();  // Changed to AppDbContext
-                    context.Database.EnsureCreated();
-                    System.Console.WriteLine("✅ Database created successfully!");
-                }
-                catch (System.Exception ex)
-                {
-                    System.Console.WriteLine($"❌ Database creation failed: {ex.Message}");
-                }
-            }
-
+            
+            // TEMPORARILY DISABLE DATABASE INITIALIZATION
+            Console.WriteLine("🚀 Backend starting without database initialization...");
+            
             host.Run();
         }
 
@@ -40,7 +27,7 @@ namespace TaskManagerAPI
                     webBuilder.ConfigureServices((context, services) =>
                     {
                         services.AddControllers();
-                        services.AddDbContext<AppDbContext>(options =>  // Changed to AppDbContext
+                        services.AddDbContext<AppDbContext>(options =>
                             options.UseSqlite("Data Source=Data/tasks.db"));
                         
                         services.AddScoped<ITaskService, TaskService>();
