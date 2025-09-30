@@ -224,7 +224,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}") -f TaskManagerAPI/TaskManagerAPI/Dockerfile TaskManagerAPI/TaskManagerAPI"
+                    sh "docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}") -f TaskManagerAPI/TaskManagerAPI/Dockerfile TaskManagerAPI/TaskManagerAPI"
                     sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
                 }
             }
