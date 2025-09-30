@@ -6,14 +6,9 @@ services:
     ports:
       - "5000:80"
     volumes:
-      - backend_data:/app/Data  # Add this line
+      - /var/lib/taskmanager/data:/app/Data  # Use host path
     networks:
       - app-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   frontend:
     image: taskmanager-frontend:latest
@@ -28,7 +23,3 @@ services:
 networks:
   app-network:
     driver: bridge
-
-volumes:  # Add this section
-  backend_data:
-    driver: local
