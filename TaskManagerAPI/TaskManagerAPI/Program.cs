@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using TaskManagerAPI.Data;  // Make sure this is included
+using TaskManagerAPI.Services;
 
 namespace TaskManagerAPI
 {
