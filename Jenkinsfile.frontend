@@ -22,9 +22,12 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 dir('taskmanager-frontend') {
-                    // Use workspace-local npm cache to avoid permission issues
-                    sh 'npm config set cache ./npm-cache'
-                    sh 'npm install'
+                    // Configure npm to use workspace-local cache and config
+                    sh '''
+                        npm config set cache ./npm-cache --global false
+                        npm config set userconfig ./npmrc --global false
+                        npm install
+                    '''
                 }
             }
             post {
@@ -91,7 +94,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    // Build Docker image from the frontend folder
+                    // Build Docker image from frontend folder
                     docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}", './taskmanager-frontend')
                     sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
                 }
