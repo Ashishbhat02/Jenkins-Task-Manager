@@ -3,18 +3,20 @@ using TaskManagerAPI.Models;
 
 namespace TaskManagerAPI.Data
 {
-    public class AppDbContext : DbContext
+    public class ApplicationDbContext : DbContext
     {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
         {
         }
 
-        public DbSet<TaskItem> Tasks { get; set; }
+        public DbSet<Task> Tasks { get; set; }
 
-        // Remove the complex OnModelCreating for now to avoid errors
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            // We'll add seed data later through migrations
+            if (!optionsBuilder.IsConfigured)
+            {
+                optionsBuilder.UseSqlite("Data Source=Data/tasks.db");
+            }
         }
     }
 }
