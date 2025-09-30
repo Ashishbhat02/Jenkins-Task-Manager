@@ -1,42 +1,54 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
+using TaskManagerAPI.Data;
 
-namespace TaskManagerAPI
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+builder.Services.AddControllers();
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlite("Data Source=Data/tasks.db"));
+
+builder.Services.AddCors(options =>
 {
-    public class Program
+    options.AddPolicy("AllowAll", policy =>
     {
-        public static void Main(string[] args)
-        {
-            CreateHostBuilder(args).Build().Run();
-        }
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
 
-        public static IHostBuilder CreateHostBuilder(string[] args) =>
-            Host.CreateDefaultBuilder(args)
-                .ConfigureWebHostDefaults(webBuilder =>
-                {
-                    webBuilder.UseStartup<Startup>();
-                    // Listen on all network interfaces, port 80
-                    webBuilder.UseUrls("http://0.0.0.0:80");
-                });
-    }
-}
-
-
-// Add this to your Program.cs after building the app
 var app = builder.Build();
 
-// Database initialization
+// Database initialization - THIS IS CRITICAL
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<ApplicationDbContext>();
-        context.Database.EnsureCreated(); // This creates tables if they don't exist
-        Console.WriteLine("Database created successfully");
+        context.Database.EnsureCreated(); // Creates database and tables
+        Console.WriteLine("✅ Database created successfully!");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Database creation failed: {ex.Message}");
+        Console.WriteLine($"❌ Database creation failed: {ex.Message}");
     }
 }
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+
+app.UseCors("AllowAll");
+app.UseRouting();
+app.UseAuthorization();
+app.MapControllers();
+
+Console.WriteLine("🚀 Backend starting...");
+app.Run();

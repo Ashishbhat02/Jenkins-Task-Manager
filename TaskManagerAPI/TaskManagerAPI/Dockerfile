@@ -15,9 +15,12 @@ RUN dotnet build "TaskManagerAPI.csproj" -c Release -o /app/build
 FROM build AS publish
 RUN dotnet publish "TaskManagerAPI.csproj" -c Release -o /app/publish
 
-# Final stage
-FROM mcr.microsoft.com/dotnet/aspnet:5.0 AS final
+# Final stage - CHANGED TO ALPINE AND ADDED SQLITE
+FROM mcr.microsoft.com/dotnet/aspnet:5.0-alpine AS final
 WORKDIR /app
+
+# Install SQLite and curl for health checks
+RUN apk add --no-cache sqlite curl
 
 # Create non-root user for security
 RUN adduser -u 1000 --disabled-password --gecos "" appuser && \
