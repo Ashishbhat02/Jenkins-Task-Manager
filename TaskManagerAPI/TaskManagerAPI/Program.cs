@@ -3,8 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
-using TaskManagerAPI.Data;
-using System;
+using TaskManagerAPI.Data;  // Make sure this is included
 
 namespace TaskManagerAPI
 {
@@ -20,13 +19,13 @@ namespace TaskManagerAPI
                 var services = scope.ServiceProvider;
                 try
                 {
-                    var context = services.GetRequiredService<ApplicationDbContext>();
+                    var context = services.GetRequiredService<AppDbContext>();  // Changed to AppDbContext
                     context.Database.EnsureCreated();
-                    Console.WriteLine("✅ Database created successfully!");
+                    System.Console.WriteLine("✅ Database created successfully!");
                 }
-                catch (Exception ex)
+                catch (System.Exception ex)
                 {
-                    Console.WriteLine($"❌ Database creation failed: {ex.Message}");
+                    System.Console.WriteLine($"❌ Database creation failed: {ex.Message}");
                 }
             }
 
@@ -39,11 +38,12 @@ namespace TaskManagerAPI
                 {
                     webBuilder.ConfigureServices((context, services) =>
                     {
-                        // Add services to the container.
                         services.AddControllers();
-                        services.AddDbContext<ApplicationDbContext>(options =>
+                        services.AddDbContext<AppDbContext>(options =>  // Changed to AppDbContext
                             options.UseSqlite("Data Source=Data/tasks.db"));
-
+                        
+                        services.AddScoped<ITaskService, TaskService>();
+                        
                         services.AddCors(options =>
                         {
                             options.AddPolicy("AllowAll", policy =>
@@ -57,14 +57,6 @@ namespace TaskManagerAPI
 
                     webBuilder.Configure(app =>
                     {
-                        var env = app.ApplicationServices.GetRequiredService<IWebHostEnvironment>();
-
-                        // Configure the HTTP request pipeline.
-                        if (env.IsDevelopment())
-                        {
-                            app.UseDeveloperExceptionPage();
-                        }
-
                         app.UseCors("AllowAll");
                         app.UseRouting();
                         app.UseAuthorization();
@@ -72,8 +64,6 @@ namespace TaskManagerAPI
                         {
                             endpoints.MapControllers();
                         });
-
-                        Console.WriteLine("🚀 Backend starting...");
                     });
                 });
     }
