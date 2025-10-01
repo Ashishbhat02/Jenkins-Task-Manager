@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://localhost:5000/api/tasks';
+// Use relative path or your actual backend URL
+const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
 
 // Create axios instance with base configuration
 const apiClient = axios.create({
@@ -14,7 +15,7 @@ const taskService = {
   // Get all tasks
   getAllTasks: async () => {
     try {
-      const response = await apiClient.get('/');
+      const response = await apiClient.get('/tasks');
       return response.data;
     } catch (error) {
       console.error('Error fetching tasks:', error);
@@ -25,7 +26,7 @@ const taskService = {
   // Get task by ID
   getTaskById: async (id) => {
     try {
-      const response = await apiClient.get(`/${id}`);
+      const response = await apiClient.get(`/tasks/${id}`);
       return response.data;
     } catch (error) {
       console.error('Error fetching task:', error);
@@ -36,7 +37,7 @@ const taskService = {
   // Create new task
   createTask: async (task) => {
     try {
-      const response = await apiClient.post('/', task);
+      const response = await apiClient.post('/tasks', task);
       return response.data;
     } catch (error) {
       console.error('Error creating task:', error);
@@ -47,7 +48,7 @@ const taskService = {
   // Update task
   updateTask: async (task) => {
     try {
-      const response = await apiClient.put(`/${task.id}`, task);
+      const response = await apiClient.put(`/tasks/${task.id}`, task);
       return response.data;
     } catch (error) {
       console.error('Error updating task:', error);
@@ -58,7 +59,7 @@ const taskService = {
   // Delete task
   deleteTask: async (id) => {
     try {
-      await apiClient.delete(`/${id}`);
+      await apiClient.delete(`/tasks/${id}`);
     } catch (error) {
       console.error('Error deleting task:', error);
       throw error;
