@@ -4,6 +4,9 @@ FROM node:16-alpine AS build
 # Set working directory
 WORKDIR /app
 
+# Set the correct API URL for React build - THIS IS CRITICAL
+ENV REACT_APP_API_URL=http://43.205.124.152:5000
+
 # Copy package files
 COPY package.json package-lock.json ./
 
