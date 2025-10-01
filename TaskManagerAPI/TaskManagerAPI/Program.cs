@@ -5,7 +5,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.EntityFrameworkCore;
 using TaskManagerAPI.Data;
 using TaskManagerAPI.Services;
-using System;  
+using System;
+using Microsoft.AspNetCore.Http;
 
 namespace TaskManagerAPI
 {
@@ -14,10 +15,10 @@ namespace TaskManagerAPI
         public static void Main(string[] args)
         {
             var host = CreateHostBuilder(args).Build();
-            
+
             // TEMPORARILY DISABLE DATABASE INITIALIZATION
             Console.WriteLine("🚀 Backend starting without database initialization...");
-            
+
             host.Run();
         }
 
@@ -30,9 +31,9 @@ namespace TaskManagerAPI
                         services.AddControllers();
                         services.AddDbContext<AppDbContext>(options =>
                             options.UseSqlite("Data Source=Data/tasks.db"));
-                        
+
                         services.AddScoped<ITaskService, TaskService>();
-                        
+
                         services.AddCors(options =>
                         {
                             options.AddPolicy("AllowAll", policy =>
@@ -51,7 +52,22 @@ namespace TaskManagerAPI
                         app.UseAuthorization();
                         app.UseEndpoints(endpoints =>
                         {
+                            // Map controllers
                             endpoints.MapControllers();
+
+                            // Health check endpoint
+                            endpoints.MapGet("/health", async context =>
+                            {
+                                context.Response.ContentType = "application/json";
+                                await context.Response.WriteAsync("{\"status\":\"Healthy\"}");
+                            });
+
+                            // Optional root route
+                            // endpoints.MapGet("/", async context =>
+                            // {
+                            //     context.Response.ContentType = "text/plain";
+                            //     await context.Response.WriteAsync("Backend is up");
+                            // });
                         });
                     });
                 });
