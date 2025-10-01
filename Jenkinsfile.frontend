@@ -6,17 +6,30 @@ pipeline {
     }
 
     stages {
+        // Unconditional checkout so changeset has data to evaluate
+        stage('Prepare') {
+            steps {
+                // Checkout the repo (so changeset works later)
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [[$class: 'CleanBeforeCheckout']],
+                    submoduleCfg: [],
+                    // update with your repo URL if different
+                    userRemoteConfigs: [[url: 'https://github.com/Ashishbhat02/Jenkins-Task-Manager']]
+                ])
+                sh 'pwd'
+                sh 'ls -la'
+            }
+        }
+
+        // Actual pipeline only runs if frontend files changed
         stage('Run Frontend Pipeline') {
             when {
                 changeset '**/taskmanager-frontend/**'
             }
             stages {
-                stage('Checkout SCM') {
-                    steps {
-                        checkout scm
-                    }
-                }
-
                 stage('Install Dependencies') {
                     steps {
                         dir('taskmanager-frontend') {
@@ -34,7 +47,8 @@ pipeline {
                 stage('Build React App') {
                     steps {
                         dir('taskmanager-frontend') {
-                            sh 'export REACT_APP_API_URL=http://43.205.124.152:5000 && npm run build'
+                            // replace API URL as needed or inject via env/parameters
+                            sh 'export REACT_APP_API_URL=http://13.200.76.198:5000 && npm run build'
                         }
                     }
                 }
@@ -64,8 +78,8 @@ pipeline {
                     steps {
                         script {
                             sleep 5
-                            sh 'docker ps | grep taskmanager-frontend-prod || echo "Container not found"'
-                            sh 'curl -f http://localhost/ || echo "Frontend might be starting..."'
+                            sh 'docker ps | grep taskmanager-frontend-prod || echo \"Container not found\"'
+                            sh 'curl -f http://localhost/ || echo \"Frontend might be starting...\"'
                         }
                     }
                 }
@@ -73,23 +87,29 @@ pipeline {
                 stage('Archive Artifacts') {
                     steps {
                         dir('taskmanager-frontend') {
-                            archiveArtifacts artifacts: 'build/**', fingerprint: true
+                            script {
+                                if (fileExists('build')) {
+                                    archiveArtifacts artifacts: 'build/**', fingerprint: true
+                                } else {
+                                    echo 'No build folder to archive.'
+                                }
+                            }
                         }
                     }
                 }
-            }
-        }
-    }
+            } // end nested stages
+        } // end Run Frontend Pipeline
+    } // end stages
 
     post {
-        always {
-            cleanWs()
-        }
         success {
             echo "Frontend build and deployment succeeded ✅"
         }
         failure {
             echo "Frontend build failed ❌"
+        }
+        always {
+            cleanWs()
         }
     }
 }
