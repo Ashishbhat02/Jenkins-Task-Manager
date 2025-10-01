@@ -3,10 +3,10 @@ pipeline {
 
     environment {
         NODE_IMAGE = 'node:18-alpine'
+        DOCKER_IMAGE = 'taskmanager-frontend'
     }
 
     stages {
-
         stage('Checkout SCM') {
             steps {
                 checkout scm
@@ -16,7 +16,6 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 dir('taskmanager-frontend') {
-                    // Create local npm cache and npmrc to avoid permission issues
                     sh '''
                         mkdir -p .npm-cache
                         touch .npmrc
@@ -32,8 +31,6 @@ pipeline {
             steps {
                 dir('taskmanager-frontend') {
                     echo "Skipping lint for now in CI"
-                    // Optional: uncomment if you fix lint later
-                    // sh 'npm run lint || true'
                 }
             }
         }
@@ -41,7 +38,8 @@ pipeline {
         stage('Build React App') {
             steps {
                 dir('taskmanager-frontend') {
-                    sh 'npm run build'
+                    // Set the correct API URL during build
+                    sh 'export REACT_APP_API_URL=http://43.205.124.152:5000 && npm run build'
                 }
             }
         }
@@ -50,8 +48,30 @@ pipeline {
             steps {
                 dir('taskmanager-frontend') {
                     echo "Skipping tests for now in CI"
-                    // Optional: uncomment if you fix Jest for ESM
-                    // sh 'npm test -- --watchAll=false --coverage'
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir('taskmanager-frontend') {
+                    script {
+                        sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ."
+                        sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Production') {
+            steps {
+                script {
+                    // Stop and remove old container
+                    sh 'docker stop taskmanager-frontend-prod || true'
+                    sh 'docker rm taskmanager-frontend-prod || true'
+                    
+                    // Run new container
+                    sh "docker run -d -p 80:80 --name taskmanager-frontend-prod ${DOCKER_IMAGE}:latest"
                 }
             }
         }
@@ -63,18 +83,6 @@ pipeline {
                 }
             }
         }
-
-        stage('Build Docker Image') {
-            steps {
-                echo "Skipping Docker build: Docker not installed on this agent"
-                // Optional: uncomment if Docker becomes available
-                // dir('taskmanager-frontend') {
-                //     script {
-                //         docker.build("taskmanager-frontend:${env.BUILD_NUMBER}")
-                //     }
-                // }
-            }
-        }
     }
 
     post {
@@ -82,7 +90,7 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Frontend build succeeded ✅"
+            echo "Frontend build and deployment succeeded ✅"
         }
         failure {
             echo "Frontend build failed ❌"
