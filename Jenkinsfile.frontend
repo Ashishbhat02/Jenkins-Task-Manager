@@ -1,5 +1,3 @@
-# Create the updated Jenkinsfile.frontend
-cat > /var/lib/jenkins/workspace/main/Jenkinsfile.frontend << 'EOF'
 pipeline {
     agent any
 
