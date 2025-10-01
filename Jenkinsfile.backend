@@ -7,63 +7,61 @@ pipeline {
         DOTNET_CONTAINER = 'mcr.microsoft.com/dotnet/sdk:5.0'
         DOTNET_CLI_HOME = "${WORKSPACE}/.dotnet"
     }
+
     stages {
-        stage('Checkout Code') {
-            steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    doGenerateSubmoduleConfigurations: false,
-                    extensions: [[$class: 'CleanBeforeCheckout']],
-                    submoduleCfg: [],
-                    userRemoteConfigs: [[url: 'https://github.com/Ashishbhat02/Jenkins-Task-Manager']]
-                ])
-                sh 'pwd'
-                sh 'ls -la'
+        stage('Run Backend Pipeline') {
+            when {
+                changeset "**/TaskManagerAPI/**"
             }
-        }
-
-        stage('Restore & Build & Test & Publish') {
-            agent {
-                docker {
-                    image "${DOTNET_CONTAINER}"
-                    reuseNode true
-                }
-            }
-            steps {
-                script {
-                    // Ensure DOTNET_CLI_HOME exists and is writable
-                    sh "mkdir -p ${DOTNET_CLI_HOME}"
-                    
-                    // Restore dependencies
-                    sh "dotnet restore ${PROJECT_PATH}"
-                    
-                    // Build application
-                    sh "dotnet build ${PROJECT_PATH} -c Release --no-restore"
-                    
-                    // Run tests (continue even if tests fail)
-                    try {
-                        sh "dotnet test ${PROJECT_PATH} --verbosity normal --logger trx"
-                    } catch (Exception e) {
-                        echo "No tests found or tests failed: ${e.message}"
+            stages {
+                stage('Checkout Code') {
+                    steps {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: '*/main']],
+                            doGenerateSubmoduleConfigurations: false,
+                            extensions: [[$class: 'CleanBeforeCheckout']],
+                            submoduleCfg: [],
+                            userRemoteConfigs: [[url: 'https://github.com/Ashishbhat02/Jenkins-Task-Manager']]
+                        ])
+                        sh 'pwd'
+                        sh 'ls -la'
                     }
-                    
-                    // Publish application
-                    sh "dotnet publish ${PROJECT_PATH} -c Release -o ./publish --no-restore"
                 }
-            }
-        }
 
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} -f TaskManagerAPI/TaskManagerAPI/Dockerfile.fixed TaskManagerAPI/TaskManagerAPI"
-                    sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
+                stage('Restore & Build & Test & Publish') {
+                    agent {
+                        docker {
+                            image "${DOTNET_CONTAINER}"
+                            reuseNode true
+                        }
+                    }
+                    steps {
+                        script {
+                            sh "mkdir -p ${DOTNET_CLI_HOME}"
+                            sh "dotnet restore ${PROJECT_PATH}"
+                            sh "dotnet build ${PROJECT_PATH} -c Release --no-restore"
+                            try {
+                                sh "dotnet test ${PROJECT_PATH} --verbosity normal --logger trx"
+                            } catch (Exception e) {
+                                echo "No tests found or tests failed: ${e.message}"
+                            }
+                            sh "dotnet publish ${PROJECT_PATH} -c Release -o ./publish --no-restore"
+                        }
+                    }
+                }
+
+                stage('Build Docker Image') {
+                    steps {
+                        script {
+                            sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} -f TaskManagerAPI/TaskManagerAPI/Dockerfile.fixed TaskManagerAPI/TaskManagerAPI"
+                            sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
+                        }
+                    }
                 }
             }
         }
     }
-
 
     post {
         always {
