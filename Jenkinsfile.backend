@@ -2,33 +2,35 @@ pipeline {
     agent any
 
     environment {
-        PROJECT_PATH = 'TaskManagerAPI/TaskManagerAPI/TaskManagerAPI.csproj'
-        DOCKER_IMAGE = 'taskmanager-backend'
-        DOTNET_CONTAINER = 'mcr.microsoft.com/dotnet/sdk:5.0'
+        PROJECT_PATH    = 'TaskManagerAPI/TaskManagerAPI/TaskManagerAPI.csproj'
+        DOCKER_IMAGE    = 'taskmanager-backend'
+        DOTNET_CONTAINER= 'mcr.microsoft.com/dotnet/sdk:5.0'
         DOTNET_CLI_HOME = "${WORKSPACE}/.dotnet"
     }
 
     stages {
+        // 1) Unconditional checkout so 'changeset' has data to inspect
+        stage('Prepare') {
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [[$class: 'CleanBeforeCheckout']],
+                    submoduleCfg: [],
+                    userRemoteConfigs: [[url: 'https://github.com/Ashishbhat02/Jenkins-Task-Manager']]
+                ])
+                sh 'pwd'
+                sh 'ls -la'
+            }
+        }
+
+        // 2) The rest of pipeline only runs if backend files changed
         stage('Run Backend Pipeline') {
             when {
                 changeset "**/TaskManagerAPI/**"
             }
             stages {
-                stage('Checkout Code') {
-                    steps {
-                        checkout([
-                            $class: 'GitSCM',
-                            branches: [[name: '*/main']],
-                            doGenerateSubmoduleConfigurations: false,
-                            extensions: [[$class: 'CleanBeforeCheckout']],
-                            submoduleCfg: [],
-                            userRemoteConfigs: [[url: 'https://github.com/Ashishbhat02/Jenkins-Task-Manager']]
-                        ])
-                        sh 'pwd'
-                        sh 'ls -la'
-                    }
-                }
-
                 stage('Restore & Build & Test & Publish') {
                     agent {
                         docker {
@@ -41,6 +43,7 @@ pipeline {
                             sh "mkdir -p ${DOTNET_CLI_HOME}"
                             sh "dotnet restore ${PROJECT_PATH}"
                             sh "dotnet build ${PROJECT_PATH} -c Release --no-restore"
+                            // run tests but don't fail entire build on test failures
                             try {
                                 sh "dotnet test ${PROJECT_PATH} --verbosity normal --logger trx"
                             } catch (Exception e) {
@@ -60,19 +63,27 @@ pipeline {
                     }
                 }
             }
-        }
-    }
+        } // end Run Backend Pipeline
+    } // end stages
 
     post {
-        always {
-            archiveArtifacts artifacts: 'publish/**/*', fingerprint: true
-            cleanWs()
-        }
         success {
+            // only archive if publish was generated
+            script {
+                if (fileExists('publish')) {
+                    archiveArtifacts artifacts: 'publish/**/*', fingerprint: true
+                } else {
+                    echo "No publish folder to archive."
+                }
+            }
             echo 'Backend build completed successfully! ✅'
         }
         failure {
             echo 'Backend build failed! ❌'
+        }
+        always {
+            // cleanup workspace at the end
+            cleanWs()
         }
     }
 }
