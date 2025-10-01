@@ -7,7 +7,6 @@ pipeline {
         DOTNET_CONTAINER = 'mcr.microsoft.com/dotnet/sdk:5.0'
         DOTNET_CLI_HOME = "${WORKSPACE}/.dotnet"
     }
-
     stages {
         stage('Checkout Code') {
             steps {
