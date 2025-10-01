@@ -6,69 +6,76 @@ pipeline {
     }
 
     stages {
-        stage('Checkout SCM') {
-            steps {
-                checkout scm
+        stage('Run Frontend Pipeline') {
+            when {
+                changeset '**/taskmanager-frontend/**'
             }
-        }
-
-        stage('Install Dependencies') {
-            steps {
-                dir('taskmanager-frontend') {
-                    sh '''
-                        mkdir -p .npm-cache
-                        touch .npmrc
-                        export NPM_CONFIG_CACHE=$(pwd)/.npm-cache
-                        export NPM_CONFIG_USERCONFIG=$(pwd)/.npmrc
-                        npm install
-                    '''
-                }
-            }
-        }
-
-        stage('Build React App') {
-            steps {
-                dir('taskmanager-frontend') {
-                    sh 'export REACT_APP_API_URL=http://43.205.124.152:5000 && npm run build'
-                }
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                dir('taskmanager-frontend') {
-                    script {
-                        sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ."
-                        sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
+            stages {
+                stage('Checkout SCM') {
+                    steps {
+                        checkout scm
                     }
                 }
-            }
-        }
 
-        stage('Deploy to Production') {
-            steps {
-                script {
-                    sh 'docker stop taskmanager-frontend-prod || true'
-                    sh 'docker rm taskmanager-frontend-prod || true'
-                    sh "docker run -d -p 80:80 --name taskmanager-frontend-prod ${DOCKER_IMAGE}:latest"
+                stage('Install Dependencies') {
+                    steps {
+                        dir('taskmanager-frontend') {
+                            sh '''
+                                mkdir -p .npm-cache
+                                touch .npmrc
+                                export NPM_CONFIG_CACHE=$(pwd)/.npm-cache
+                                export NPM_CONFIG_USERCONFIG=$(pwd)/.npmrc
+                                npm install
+                            '''
+                        }
+                    }
                 }
-            }
-        }
 
-        stage('Verify Deployment') {
-            steps {
-                script {
-                    sleep 5
-                    sh 'docker ps | grep taskmanager-frontend-prod || echo "Container not found"'
-                    sh 'curl -f http://localhost/ || echo "Frontend might be starting..."'
+                stage('Build React App') {
+                    steps {
+                        dir('taskmanager-frontend') {
+                            sh 'export REACT_APP_API_URL=http://43.205.124.152:5000 && npm run build'
+                        }
+                    }
                 }
-            }
-        }
 
-        stage('Archive Artifacts') {
-            steps {
-                dir('taskmanager-frontend') {
-                    archiveArtifacts artifacts: 'build/**', fingerprint: true
+                stage('Build Docker Image') {
+                    steps {
+                        dir('taskmanager-frontend') {
+                            script {
+                                sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ."
+                                sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
+                            }
+                        }
+                    }
+                }
+
+                stage('Deploy to Production') {
+                    steps {
+                        script {
+                            sh 'docker stop taskmanager-frontend-prod || true'
+                            sh 'docker rm taskmanager-frontend-prod || true'
+                            sh "docker run -d -p 80:80 --name taskmanager-frontend-prod ${DOCKER_IMAGE}:latest"
+                        }
+                    }
+                }
+
+                stage('Verify Deployment') {
+                    steps {
+                        script {
+                            sleep 5
+                            sh 'docker ps | grep taskmanager-frontend-prod || echo "Container not found"'
+                            sh 'curl -f http://localhost/ || echo "Frontend might be starting..."'
+                        }
+                    }
+                }
+
+                stage('Archive Artifacts') {
+                    steps {
+                        dir('taskmanager-frontend') {
+                            archiveArtifacts artifacts: 'build/**', fingerprint: true
+                        }
+                    }
                 }
             }
         }
