@@ -6,17 +6,14 @@ pipeline {
     }
 
     stages {
-        // Unconditional checkout so changeset has data to evaluate
-        stage('Prepare') {
+        stage('Checkout') {
             steps {
-                // Checkout the repo (so changeset works later)
                 checkout([
                     $class: 'GitSCM',
                     branches: [[name: '*/main']],
                     doGenerateSubmoduleConfigurations: false,
                     extensions: [[$class: 'CleanBeforeCheckout']],
                     submoduleCfg: [],
-                    // update with your repo URL if different
                     userRemoteConfigs: [[url: 'https://github.com/Ashishbhat02/Jenkins-Task-Manager']]
                 ])
                 sh 'pwd'
@@ -24,82 +21,106 @@ pipeline {
             }
         }
 
-        // Actual pipeline only runs if frontend files changed
-        stage('Run Frontend Pipeline') {
-            when {
-                changeset '**/taskmanager-frontend/**'
+        // Add a filter stage to exit early if no frontend changes
+        stage('Check Changes') {
+            steps {
+                script {
+                    // Check if any frontend files changed
+                    def frontendChanges = checkout(
+                        changelog: true, 
+                        poll: true, 
+                        scm: [$class: 'GitSCM',
+                            branches: [[name: '*/main']],
+                            userRemoteConfigs: [[url: 'https://github.com/Ashishbhat02/Jenkins-Task-Manager']]
+                        ]
+                    )
+
+                    // Use Jenkins built-in 'changeset' to detect
+                    def hasFrontendChanges = false
+                    for (change in currentBuild.changeSets) {
+                        for (file in change.items) {
+                            if (file.affectedFiles.any { it.path.startsWith("taskmanager-frontend/") }) {
+                                hasFrontendChanges = true
+                            }
+                        }
+                    }
+
+                    if (!hasFrontendChanges) {
+                        echo "No frontend changes detected. Skipping pipeline."
+                        currentBuild.result = 'NOT_BUILT'
+                        error("Stopping build – no frontend changes")
+                    }
+                }
             }
-            stages {
-                stage('Install Dependencies') {
-                    steps {
-                        dir('taskmanager-frontend') {
-                            sh '''
-                                mkdir -p .npm-cache
-                                touch .npmrc
-                                export NPM_CONFIG_CACHE=$(pwd)/.npm-cache
-                                export NPM_CONFIG_USERCONFIG=$(pwd)/.npmrc
-                                npm install
-                            '''
-                        }
-                    }
-                }
+        }
 
-                stage('Build React App') {
-                    steps {
-                        dir('taskmanager-frontend') {
-                            // replace API URL as needed or inject via env/parameters
-                            sh 'export REACT_APP_API_URL=http://13.200.76.198:5000 && npm run build'
-                        }
-                    }
+        stage('Install Dependencies') {
+            steps {
+                dir('taskmanager-frontend') {
+                    sh '''
+                        mkdir -p .npm-cache
+                        touch .npmrc
+                        export NPM_CONFIG_CACHE=$(pwd)/.npm-cache
+                        export NPM_CONFIG_USERCONFIG=$(pwd)/.npmrc
+                        npm install
+                    '''
                 }
+            }
+        }
 
-                stage('Build Docker Image') {
-                    steps {
-                        dir('taskmanager-frontend') {
-                            script {
-                                sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ."
-                                sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
-                            }
-                        }
-                    }
+        stage('Build React App') {
+            steps {
+                dir('taskmanager-frontend') {
+                    sh 'export REACT_APP_API_URL=http://13.200.76.198:5000 && npm run build'
                 }
+            }
+        }
 
-                stage('Deploy to Production') {
-                    steps {
-                        script {
-                            sh 'docker stop taskmanager-frontend-prod || true'
-                            sh 'docker rm taskmanager-frontend-prod || true'
-                            sh "docker run -d -p 80:80 --name taskmanager-frontend-prod ${DOCKER_IMAGE}:latest"
-                        }
+        stage('Build Docker Image') {
+            steps {
+                dir('taskmanager-frontend') {
+                    script {
+                        sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ."
+                        sh "docker tag ${DOCKER_IMAGE}:${env.BUILD_NUMBER} ${DOCKER_IMAGE}:latest"
                     }
                 }
+            }
+        }
 
-                stage('Verify Deployment') {
-                    steps {
-                        script {
-                            sleep 5
-                            sh 'docker ps | grep taskmanager-frontend-prod || echo \"Container not found\"'
-                            sh 'curl -f http://localhost/ || echo \"Frontend might be starting...\"'
-                        }
-                    }
+        stage('Deploy to Production') {
+            steps {
+                script {
+                    sh 'docker stop taskmanager-frontend-prod || true'
+                    sh 'docker rm taskmanager-frontend-prod || true'
+                    sh "docker run -d -p 80:80 --name taskmanager-frontend-prod ${DOCKER_IMAGE}:latest"
                 }
+            }
+        }
 
-                stage('Archive Artifacts') {
-                    steps {
-                        dir('taskmanager-frontend') {
-                            script {
-                                if (fileExists('build')) {
-                                    archiveArtifacts artifacts: 'build/**', fingerprint: true
-                                } else {
-                                    echo 'No build folder to archive.'
-                                }
-                            }
+        stage('Verify Deployment') {
+            steps {
+                script {
+                    sleep 5
+                    sh 'docker ps | grep taskmanager-frontend-prod || echo "Container not found"'
+                    sh 'curl -f http://localhost/ || echo "Frontend might be starting..."'
+                }
+            }
+        }
+
+        stage('Archive Artifacts') {
+            steps {
+                dir('taskmanager-frontend') {
+                    script {
+                        if (fileExists('build')) {
+                            archiveArtifacts artifacts: 'build/**', fingerprint: true
+                        } else {
+                            echo 'No build folder to archive.'
                         }
                     }
                 }
-            } // end nested stages
-        } // end Run Frontend Pipeline
-    } // end stages
+            }
+        }
+    }
 
     post {
         success {
